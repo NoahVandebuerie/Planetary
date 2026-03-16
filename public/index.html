@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetary</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="home-page">
+<div class="ambient"></div>
+<div class="app home-app">
+    <div class="home-shell">
+        <header class="home-header">
+            <div class="brand">
+                <div class="logo">PL</div>
+                <div>
+                    <div class="title">Planetary</div>
+                    <div class="subtitle">A P2P transfer universe</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a id="universeLink" class="ghost-btn" href="universe.html" style="text-decoration: none;">Universe</a>
+                <a id="guestLobbyLink" class="ghost-btn" href="lobby.html?mode=join" style="text-decoration: none;">Lobby (gast)</a>
+                <button id="logoutBtn" class="ghost-btn hidden" type="button">Logout</button>
+                <button class="account-btn" type="button" aria-label="Account">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <section class="home-hero">
+            <div class="hero-copy">
+                <h1>Planets for P2P transfers, built for speed.</h1>
+                <p class="panel-sub">
+                    Leden beheren planeten en de universe‑weergave. Gasten kunnen rooms maken en joinen, maar niet aanpassen.
+                </p>
+                <div class="button-row">
+                    <a class="primary-btn" href="lobby.html?mode=join" style="text-decoration: none;">Join room</a>
+                    <a class="primary-btn blue-btn" href="lobby.html?mode=create" style="text-decoration: none;">Create room</a>
+                    <a class="ghost-btn" href="universe.html" style="text-decoration: none;">Open Universe</a>
+                </div>
+                <div class="home-meta">Max 4 deelnemers • live chat • rechtstreeks P2P</div>
+                <div id="memberUnlockNote" class="auth-note"></div>
+            </div>
+            <div class="hero-badges">
+                <div class="badge">P2P-only</div>
+                <div class="badge">Room ID + Code</div>
+                <div class="badge">Per transfer accept</div>
+            </div>
+        </section>
+
+        <section class="panel auth-panel">
+            <div class="auth-copy">
+                <h2>Login of registreer</h2>
+                <p class="panel-sub">
+                    Gebruik je account voor Universe en het beheren van room instellingen.
+                </p>
+                <ul class="auth-benefits">
+                    <li>Universe toegang en room‑beheer</li>
+                    <li>Room‑geschiedenis en bewaarde instellingen</li>
+                    <li>Toekomstige cloud‑logs en team‑rooms</li>
+                </ul>
+            </div>
+            <div class="auth-card">
+                <div class="auth-tabs">
+                    <button class="auth-tab active" data-tab="login">Login</button>
+                    <button class="auth-tab" data-tab="register">Register</button>
+                </div>
+                <div class="auth-body active" data-tab-body="login">
+                    <label for="loginIdentifier">E-mail of gebruikersnaam</label>
+                    <input id="loginIdentifier" type="text" placeholder="jouw@email.com">
+                    <label for="loginPass">Wachtwoord</label>
+                    <input id="loginPass" type="password" placeholder="••••••••">
+                    <button id="loginBtn" class="primary-btn" type="button">Login</button>
+                    <div class="auth-note">Je wordt daarna doorgestuurd naar Universe.</div>
+                </div>
+                <div class="auth-body" data-tab-body="register">
+                    <label for="regName">Gebruikersnaam</label>
+                    <input id="regName" type="text" placeholder="Jouw naam">
+                    <label for="regEmail">E-mail</label>
+                    <input id="regEmail" type="text" placeholder="jouw@email.com">
+                    <label for="regPass">Wachtwoord</label>
+                    <input id="regPass" type="password" placeholder="Min. 8 tekens">
+                    <button id="registerBtn" class="primary-btn" type="button">Register</button>
+                    <div class="auth-note">Account wordt lokaal opgeslagen (demo).</div>
+                </div>
+                <div id="authStatus" class="auth-note"></div>
+            </div>
+        </section>
+    </div>
+</div>
+<script>
+  (function () {
+    try {
+      const saved = localStorage.getItem('p2p-theme');
+      if (!saved) return;
+      const theme = JSON.parse(saved);
+      const root = document.documentElement;
+      if (theme.accent) root.style.setProperty('--accent', theme.accent);
+      if (theme.accentSoft) root.style.setProperty('--accent-soft', theme.accentSoft);
+      if (theme.accentBlue) root.style.setProperty('--accent-blue', theme.accentBlue);
+      if (theme.accentBlueSoft) root.style.setProperty('--accent-blue-soft', theme.accentBlueSoft);
+      if (theme.accent2) root.style.setProperty('--accent-2', theme.accent2);
+      if (theme.bgMid) root.style.setProperty('--bg-mid', theme.bgMid);
+      if (theme.bgDeep) root.style.setProperty('--bg-deep', theme.bgDeep);
+      if (theme.bgLight) root.style.setProperty('--bg-light', theme.bgLight);
+      if (theme.font) {
+        root.style.setProperty('--font-body', theme.font);
+        root.style.setProperty('--font-ui', theme.font);
+        root.style.setProperty('--font-heading', theme.font);
+      }
+    } catch (e) {}
+  })();
+  const tabs = document.querySelectorAll('.auth-tab');
+  const bodies = document.querySelectorAll('.auth-body');
+  const authStatus = document.getElementById('authStatus');
+  const loginBtn = document.getElementById('loginBtn');
+  const registerBtn = document.getElementById('registerBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const universeLink = document.getElementById('universeLink');
+  const guestLobbyLink = document.getElementById('guestLobbyLink');
+  const memberUnlockNote = document.getElementById('memberUnlockNote');
+
+  function setStatus(msg, isError) {
+    if (!authStatus) return;
+    authStatus.textContent = msg || '';
+    authStatus.style.color = isError ? '#ffb3b3' : '';
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      bodies.forEach(b => b.classList.remove('active'));
+      tab.classList.add('active');
+      const id = tab.dataset.tab;
+      const body = document.querySelector(`[data-tab-body="${id}"]`);
+      if (body) body.classList.add('active');
+      setStatus('');
+    });
+  });
+
+  async function checkMe() {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.user) {
+        if (logoutBtn) logoutBtn.classList.remove('hidden');
+        if (guestLobbyLink) guestLobbyLink.classList.add('hidden');
+        setStatus(`Ingelogd als ${data.user.username}.`, false);
+        if (memberUnlockNote) {
+          memberUnlockNote.textContent = 'Upgrade unlocked: Universe is beschikbaar.';
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (loginBtn) {
+    loginBtn.addEventListener('click', async () => {
+      const identifier = document.getElementById('loginIdentifier').value.trim();
+      const password = document.getElementById('loginPass').value;
+      if (!identifier || !password) {
+        setStatus('Vul alle velden in.', true);
+        return;
+      }
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus(data.error || 'Login mislukt.', true);
+          return;
+        }
+        setStatus('Login gelukt. Doorsturen...', false);
+        window.location.href = 'universe.html';
+      } catch (e) {
+        setStatus('Serverfout.', true);
+      }
+    });
+  }
+
+  if (registerBtn) {
+    registerBtn.addEventListener('click', async () => {
+      const username = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const password = document.getElementById('regPass').value;
+      if (!username || !email || !password) {
+        setStatus('Vul alle velden in.', true);
+        return;
+      }
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus(data.error || 'Registratie mislukt.', true);
+          return;
+        }
+        setStatus('Registratie gelukt. Doorsturen...', false);
+        window.location.href = 'universe.html';
+      } catch (e) {
+        setStatus('Serverfout.', true);
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/logout', { method: 'POST' });
+        window.location.reload();
+      } catch (e) {}
+    });
+  }
+
+  checkMe();
+</script>
+</body>
+</html>

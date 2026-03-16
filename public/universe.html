@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetary Universe</title>
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.9.0/dist/es-module-shims.js"></script>
+    <script type="importmap-shim">
+        {
+          "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom": "https://esm.sh/react-dom@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "three": "https://esm.sh/three@0.160.0",
+            "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.17?external=react,react-dom,three",
+            "@react-three/fiber/": "https://esm.sh/@react-three/fiber@8.15.17/",
+            "@react-three/drei": "https://esm.sh/@react-three/drei@9.105.2?external=react,react-dom,three,@react-three/fiber"
+          }
+        }
+    </script>
+</head>
+<body class="universe-page">
+<div class="ambient"></div>
+<div class="universe-shell">
+    <div id="universeGate" class="universe-gate">
+        <div class="universe-gate-card">
+            <div class="title">Planetary Universe</div>
+            <p class="panel-sub">Login om planeten te zien en te beheren.</p>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="universe-login">Login</button>
+                <button class="auth-tab" data-tab="universe-register">Register</button>
+            </div>
+            <div class="auth-body active" data-tab-body="universe-login">
+                <label for="universeLoginIdentifier">E-mail of gebruikersnaam</label>
+                <input id="universeLoginIdentifier" type="text" placeholder="jouw@email.com">
+                <label for="universeLoginPass">Wachtwoord</label>
+                <input id="universeLoginPass" type="password" placeholder="••••••••">
+                <button id="universeLoginBtn" class="primary-btn" type="button">Login</button>
+            </div>
+            <div class="auth-body" data-tab-body="universe-register">
+                <label for="universeRegName">Gebruikersnaam</label>
+                <input id="universeRegName" type="text" placeholder="Jouw naam">
+                <label for="universeRegEmail">E-mail</label>
+                <input id="universeRegEmail" type="text" placeholder="jouw@email.com">
+                <label for="universeRegPass">Wachtwoord</label>
+                <input id="universeRegPass" type="password" placeholder="Min. 8 tekens">
+                <button id="universeRegisterBtn" class="primary-btn" type="button">Register</button>
+            </div>
+            <div id="universeAuthStatus" class="auth-note"></div>
+            <div class="button-row">
+                <a id="universeSimpleBtn" class="ghost-btn" href="lobby.html?mode=join">Ga naar lobby</a>
+            </div>
+        </div>
+    </div>
+    <div id="universeRoot" class="universe-canvas"></div>
+    <div class="universe-overlay">
+        <div class="app">
+            <header class="topbar">
+                <div class="brand">
+                <div class="logo">PL</div>
+                <div>
+                    <div class="title">Planetary Lobby</div>
+                    <div class="subtitle">Max 4 deelnemers • direct P2P</div>
+                </div>
+                </div>
+                <div class="room-tools">
+                    <div id="connectionStatus" class="connection-pill offline">Not connected</div>
+                    <div class="room-code">Room ID <button id="roomIdCopy" class="copy-pill" type="button">--</button></div>
+                    <div class="room-code">Code <button id="roomCodeCopy" class="copy-pill" type="button">--</button></div>
+                    <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave</button>
+                </div>
+            </header>
+
+            <main class="universe-main">
+                <section class="panel" id="lobbyPanel">
+                    <div class="lobby-header">
+                        <div>
+                            <h2>Lobby</h2>
+                            <p class="panel-sub">Kies je naam en maak of join een room met ID + Code.</p>
+                        </div>
+                        <div id="lobbyModeToggle" class="mode-toggle join-active">
+                            <button class="mode-option active" type="button" data-mode="join">Join room</button>
+                            <button class="mode-option" type="button" data-mode="create">Create room</button>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <label for="usernameInput">Gebruikersnaam (verplicht)</label>
+                        <input id="usernameInput" type="text" placeholder="Bijv. Noah">
+                    </div>
+
+                    <div id="joinFields">
+                        <div class="field-row">
+                            <label for="roomIdInput">Room ID</label>
+                            <input id="roomIdInput" type="text" placeholder="Bijv. 8f3k9b2q">
+                        </div>
+                        <div class="field-row">
+                            <label for="roomCodeInput">Room code</label>
+                            <input id="roomCodeInput" type="text" placeholder="Bijv. 42X9K7">
+                        </div>
+                        <div class="button-row">
+                            <button id="joinRoomBtn" class="primary-btn">Join room</button>
+                        </div>
+                    </div>
+
+                    <div id="createFields" class="hidden">
+                        <div class="field-row">
+                            <label for="roomNameInput">Room naam</label>
+                            <input id="roomNameInput" type="text" placeholder="Bijv. Team Sync">
+                        </div>
+                        <div class="field-row">
+                            <label for="roomDescriptionInput">Room omschrijving</label>
+                            <textarea id="roomDescriptionInput" rows="3" placeholder="Korte beschrijving van deze room"></textarea>
+                        </div>
+                        <div class="field-row">
+                            <label for="roomEditorsInput">Editors (optioneel)</label>
+                            <input id="roomEditorsInput" type="text" placeholder="Bijv. noah, sara">
+                        </div>
+                        <div class="field-row">
+                            <label for="maxParticipantsRange">Max deelnemers (verplicht) <span id="maxParticipantsValue">4</span></label>
+                            <input id="maxParticipantsRange" type="range" min="2" max="4" step="1" value="4">
+                        </div>
+                        <div class="field-row">
+                            <div class="field-label">Transfer‑mode (verplicht)</div>
+                            <div class="radio-group">
+                                <label class="radio-card">
+                                    <input type="radio" name="transferMode" value="all" checked required>
+                                    <span>Iedereen kan sturen</span>
+                                </label>
+                                <label class="radio-card">
+                                    <input type="radio" name="transferMode" value="owner" required>
+                                    <span>Alleen owner kan sturen</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <label class="toggle-row">
+                                <input id="allowChatToggle" type="checkbox" checked>
+                                <span>Chat toestaan</span>
+                            </label>
+                        </div>
+                        <div class="field-row">
+                            <label for="roomAccentColor">Room accentkleur</label>
+                            <input id="roomAccentColor" type="color" value="#3aa9ff">
+                        </div>
+                        <div class="button-row">
+                            <button id="createRoomBtn" class="primary-btn blue-btn">Create room</button>
+                        </div>
+                    </div>
+
+                    <div id="lobbyStatus" class="status muted"></div>
+                </section>
+
+                <section class="panel hidden" id="roomPanel">
+                    <div class="grid">
+                        <div class="col">
+                            <div class="card hidden" id="roomSettingsCard">
+                                <div class="card-title">Room settings</div>
+                                <div class="field-row">
+                                    <label for="roomSettingsTransferMode">Transfer‑mode</label>
+                                    <select id="roomSettingsTransferMode">
+                                        <option value="all">Iedereen kan sturen</option>
+                                        <option value="owner">Alleen owner kan sturen</option>
+                                    </select>
+                                </div>
+                                <div class="field-row">
+                                    <label class="toggle-row">
+                                        <input id="roomSettingsAllowChat" type="checkbox" checked>
+                                        <span>Chat toestaan</span>
+                                    </label>
+                                </div>
+                                <div class="field-row">
+                                    <label for="roomSettingsAccent">Room accentkleur</label>
+                                    <input id="roomSettingsAccent" type="color" value="#3aa9ff">
+                                </div>
+                                <div class="field-row">
+                                    <label for="roomSettingsEditors">Editors (optioneel)</label>
+                                    <input id="roomSettingsEditors" type="text" placeholder="Bijv. noah, sara">
+                                </div>
+                                <div class="button-row">
+                                    <button id="roomSettingsSaveBtn" class="primary-btn blue-btn">Save settings</button>
+                                </div>
+                                <div class="status muted">Alleen de host kan dit aanpassen.</div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title">Deelnemers</div>
+                                <div id="participantsList" class="participants"></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title">Verstuur Naar</div>
+                                <div id="targetsList" class="targets"></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title">Binnenkomende verzoeken</div>
+                                <div id="incomingRequests" class="requests"></div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card drop-card">
+                                <div id="dropzone" class="dropzone">
+                                    <input id="fileInput" type="file" multiple>
+                                    <div class="drop-content">
+                                        <div class="drop-icon">UPLOAD</div>
+                                        <div class="drop-title">Sleep bestanden hierheen</div>
+                                        <div class="drop-sub">of klik om te kiezen</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title">Transfers</div>
+                                <div id="transferQueue" class="queue"></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title">Activiteit</div>
+                                <div id="activityLog" class="log"></div>
+                            </div>
+                            <div class="card chat-card">
+                                <div class="card-title">Chat</div>
+                                <div id="chatMessages" class="chat-messages"></div>
+                                <div class="chat-input-row">
+                                    <input id="chatInput" type="text" placeholder="Typ je bericht...">
+                                    <button id="sendChatBtn" class="primary-btn">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="themePanel" class="panel theme-panel hidden">
+                    <div class="theme-header">
+                        <span>Customize</span>
+                        <button id="themeCloseBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
+                    </div>
+                    <div class="theme-grid">
+                        <label>Join accent
+                            <input id="themePrimary" type="color" value="#ffb224">
+                        </label>
+                        <label>Create accent
+                            <input id="themeCreate" type="color" value="#3aa9ff">
+                        </label>
+                        <label>Secondary accent
+                            <input id="themeAccent" type="color" value="#22d3a6">
+                        </label>
+                        <label>Background
+                            <input id="themeBg" type="color" value="#0d2430">
+                        </label>
+                        <label>Font
+                            <select id="themeFont">
+                                <option value="'Space Grotesk', sans-serif">Space Grotesk</option>
+                                <option value="'Sora', sans-serif">Sora</option>
+                                <option value="'Manrope', sans-serif">Manrope</option>
+                                <option value="'DM Sans', sans-serif">DM Sans</option>
+                                <option value="'Fraunces', serif">Fraunces</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="theme-actions">
+                        <button id="themeSaveBtn" class="primary-btn" type="button">Save</button>
+                        <button id="themeResetBtn" class="ghost-btn" type="button">Reset</button>
+                    </div>
+                </section>
+                <div class="theme-toggle-footer">
+                    <button id="themeToggleBtn" class="icon-btn" type="button" aria-label="Customize">Theme</button>
+                </div>
+            </main>
+            <aside id="universeSidebar" class="panel universe-sidebar">
+                <div class="card">
+                <div class="card-title">Planets list</div>
+                <div id="universeRoomsList" class="rooms-list"></div>
+                </div>
+                <div class="card">
+                <div class="card-title">Planets</div>
+                <div class="button-row">
+                    <button id="universeOpenJoin" class="ghost-btn" type="button">Join panel</button>
+                    <button id="universeOpenCreate" class="ghost-btn" type="button">Create panel</button>
+                </div>
+            </div>
+                <div class="card">
+                    <div class="card-title">Connected Users</div>
+                    <div id="universeUsersList" class="participants"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Message</div>
+                    <div class="field-row">
+                        <label for="universeUserSelect">User</label>
+                        <select id="universeUserSelect"></select>
+                    </div>
+                    <div class="field-row">
+                        <label for="universeMessageInput">Bericht</label>
+                        <input id="universeMessageInput" type="text" placeholder="Typ je bericht...">
+                    </div>
+                    <div class="button-row">
+                        <button id="universeMessageBtn" class="primary-btn" type="button">Send</button>
+                    </div>
+                </div>
+                <div class="card">
+                <div class="card-title">Invite to planet</div>
+                <div class="field-row">
+                    <label for="inviteRoomId">Room ID</label>
+                    <input id="inviteRoomId" type="text" placeholder="Bijv. 8f3k9b2q">
+                </div>
+                    <div class="field-row">
+                        <label for="inviteRoomCode">Room code</label>
+                        <input id="inviteRoomCode" type="text" placeholder="Bijv. 42X9K7">
+                    </div>
+                    <div class="button-row">
+                        <button id="universeInviteBtn" class="primary-btn blue-btn" type="button">Invite</button>
+                    </div>
+                </div>
+                <div class="card">
+                <div class="card-title">Planetary inbox</div>
+                <div id="universeInbox" class="log"></div>
+            </div>
+        </aside>
+        </div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module-shim" src="universe.js"></script>
+<script src="room.js"></script>
+</body>
+</html>

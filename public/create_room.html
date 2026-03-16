@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Lobby</title>
+    <meta http-equiv="refresh" content="0; url=lobby.html">
+    <script>
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has("mode")) params.set("mode", "create");
+            window.location.replace("lobby.html?" + params.toString());
+        })();
+    </script>
+</head>
+<body></body>
+</html>
