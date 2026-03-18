@@ -1048,3 +1048,34 @@ button:disabled {
         flex-direction: column;
     }
 }
+
+.divider-line {
+    height: 1px;
+    background: rgba(90, 180, 255, 0.18);
+    margin: 12px 0;
+}
+
+.planet-tooltip {
+    pointer-events: none;
+    background: rgba(7, 16, 24, 0.92);
+    border: 1px solid rgba(90, 180, 255, 0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    border-radius: 12px;
+    padding: 8px 12px;
+    color: #f4f7f9;
+    font-size: 0.78rem;
+    min-width: 140px;
+    text-align: center;
+}
+
+.planet-tooltip-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #78c8ff;
+    margin-bottom: 4px;
+}
+
+.planet-tooltip-meta {
+    color: #9fb3bf;
+    font-size: 0.74rem;
+}

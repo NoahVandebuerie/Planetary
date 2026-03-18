@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Sparkles } from "@react-three/drei";
+import { OrbitControls, Sparkles, Html } from "@react-three/drei";
 import * as THREE from "three";
 
 const socket = window.io();
@@ -165,7 +165,29 @@ function toggleElement(element, displayValue = "block") {
     return shouldShow;
 }
 
-function setPlanetEntryStatus(message = "", tone = "") {
+function setPlanetFindStatus(message = "", tone = "") {
+    const status = document.getElementById("planetFindStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove("is-error", "is-success", "is-hidden");
+    if (!message) {
+        status.classList.add("is-hidden");
+        return;
+    }
+    if (tone === "error") status.classList.add("is-error");
+    if (tone === "success") status.classList.add("is-success");
+}function setPlanetCreateStatus(message = "", tone = "") {
+    const status = document.getElementById("planetCreateStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove("is-error", "is-success", "is-hidden");
+    if (!message) {
+        status.classList.add("is-hidden");
+        return;
+    }
+    if (tone === "error") status.classList.add("is-error");
+    if (tone === "success") status.classList.add("is-success");
+}function setPlanetEntryStatus(message = "", tone = "") {
     const status = document.getElementById("planetEntryStatus");
     if (!status) return;
 
@@ -331,6 +353,73 @@ function updateSavedPlanets() {
         </div>
     `).join("");
 }
+
+window.findPlanet = () => {
+    const idEl = document.getElementById("planetFindId");
+    const keyEl = document.getElementById("planetFindKey");
+    const roomId = idEl ? idEl.value.trim() : "";
+    const key = keyEl ? keyEl.value.trim() : "";
+    if (!roomId) {
+        setPlanetFindStatus("Vul een Planet ID in.", "error");
+        return;
+    }
+    const planet = allPlanets.find(p => p.roomId === roomId) || savedPlanets.find(p => p.roomId === roomId);
+    if (!planet) {
+        setPlanetFindStatus("Geen planeet gevonden met dit ID.", "error");
+        return;
+    }
+    if (planet.isPrivate && !key) {
+        setPlanetFindStatus("Access key vereist voor deze planeet.", "error");
+        return;
+    }
+    setPlanetFindStatus("Planeet gevonden. Opening details...", "success");
+    window.showPlanetDetails(planet.roomId);
+};window.createPlanet = () => {
+    const nameEl = document.getElementById("planetCreateName");
+    const descEl = document.getElementById("planetCreateDescription");
+    const maxEl = document.getElementById("planetCreateMax");
+    const modeEl = document.getElementById("planetCreateMode");
+    const chatEl = document.getElementById("planetCreateChat");
+    const accentEl = document.getElementById("planetCreateAccent");
+
+    const roomName = nameEl ? nameEl.value.trim() : "";
+    if (!roomName) {
+        setPlanetCreateStatus("Geef een room naam op.", "error");
+        return;
+    }
+
+    const slug = roomName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const suffix = Math.random().toString(36).slice(2, 6);
+    const roomId = `${slug || "planet"}-${suffix}`;
+    const maxUsers = Math.max(2, Math.min(12, Number(maxEl ? maxEl.value : 4) || 4));
+    const accentColor = accentEl && /^#[0-9a-fA-F]{6}$/.test(accentEl.value) ? accentEl.value : "#3aa9ff";
+
+    const planet = {
+        roomId,
+        roomName,
+        isPrivate: false,
+        users: 0,
+        maxUsers,
+        accentColor,
+        nukeTimer: null,
+        description: descEl ? descEl.value.trim() : "",
+        status: "offline",
+        transferMode: modeEl ? modeEl.value : "all",
+        allowChat: chatEl ? !!chatEl.checked : true
+    };
+
+    allPlanets = [planet, ...allPlanets.filter(p => p.roomId !== roomId)];
+    if (!savedPlanets.find(p => p.roomId === roomId)) {
+        savedPlanets = [
+            { roomId, roomName, users: 0, maxUsers, status: "offline" },
+            ...savedPlanets
+        ];
+    }
+
+    updatePlanetsList();
+    updateSavedPlanets();
+    setPlanetCreateStatus("Planet aangemaakt. Selecteer om te beheren.", "success");
+};
 
 function updatePlanetsList() {
     const list = document.getElementById("planetsList");
@@ -1112,6 +1201,7 @@ function Planet({ index = 0, size = 3, color = "#3aa9ff", roomId }) {
     const planetRef = useRef(null);
     const ringRef = useRef(null);
     const [hovered, setHovered] = useState(false);
+    const planet = allPlanets.find(p => p.roomId === roomId) || { roomId, roomName: roomId, status: "offline", users: 0, maxUsers: 0, isPrivate: false };
 
     useFrame(({ clock }) => {
         if (groupRef.current) {
@@ -1181,10 +1271,16 @@ function Planet({ index = 0, size = 3, color = "#3aa9ff", roomId }) {
             distance: 15,
             color,
             decay: 2
-        })
+        }),
+        hovered ? e(Html, { position: [0, 2.1, 0], center: true, distanceFactor: 20, transform: true },
+            e("div", { className: "planet-tooltip" },
+                e("div", { className: "planet-tooltip-title" }, planet.roomName || planet.roomId),
+                e("div", { className: "planet-tooltip-meta" }, `${planet.status || "offline"} • ${planet.users || 0}/${planet.maxUsers || 0} pilots`),
+                e("div", { className: "planet-tooltip-meta" }, planet.isPrivate ? "🔒 Private" : "🔓 Public")
+            )
+        ) : null
     );
 }
-
 function UniverseScene() {
     const { camera } = useThree();
     const controlsRef = useRef(null);

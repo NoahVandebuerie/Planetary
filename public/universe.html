@@ -129,13 +129,13 @@
                     <div class="sidebar-title">👥 Friends Online</div>
                     <div class="panel-scroll" id="friendsList"></div>
                 </section>
-
                 <section class="universe-panel panel-rail">
                     <div class="panel-kicker">Saved Routes</div>
                     <div class="sidebar-title">🪐 Your Planets</div>
                     <div class="panel-scroll" id="savedPlanets"></div>
                 </section>
-            </div>
+
+                </div>
 
             <div class="universe-center">
                 <div class="universe-hud-card">
@@ -158,6 +158,58 @@
                         <div class="panel-title">🪐 Planet Command</div>
                         <div class="command-subtitle">Select a destination to inspect access, bring it online, or enter orbit.</div>
                         <div class="panel-scroll" id="planetsList"></div>
+<div class="divider-line"></div>
+<div class="panel-kicker">Find Planet</div>
+<div class="field-group">
+    <label class="field-label" for="planetFindId">Planet ID</label>
+    <input id="planetFindId" type="text" class="message-input" placeholder="planet-alpha">
+</div>
+<div class="field-group">
+    <label class="field-label" for="planetFindKey">Access key (optioneel)</label>
+    <input id="planetFindKey" type="password" class="message-input" placeholder="••••••••">
+</div>
+<div class="button-group">
+    <button class="btn-secondary" id="planetFindBtn" type="button" data-action="findPlanet">Find planet</button>
+</div>
+<div id="planetFindStatus" class="planet-entry-status is-hidden"></div>                        <div class="divider-line"></div>
+                        <div class="panel-kicker">Create New Planet</div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetCreateName">Room naam</label>
+                            <input id="planetCreateName" type="text" class="message-input" placeholder="Bijv. Team Sync">
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetCreateDescription">Room omschrijving (optioneel)</label>
+                            <textarea id="planetCreateDescription" class="modal-input" rows="2" placeholder="Korte beschrijving"></textarea>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetCreateMax">Max deelnemers</label>
+                            <select id="planetCreateMax" class="modal-input">
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4" selected>4</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetCreateMode">Transfer-mode</label>
+                            <select id="planetCreateMode" class="modal-input">
+                                <option value="all" selected>Iedereen kan sturen</option>
+                                <option value="owner">Alleen owner kan sturen</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="settings-toggle" for="planetCreateChat">
+                                <input type="checkbox" id="planetCreateChat" checked>
+                                Chat toestaan
+                            </label>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetCreateAccent">Room accentkleur</label>
+                            <input id="planetCreateAccent" type="color" value="#3aa9ff">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" id="planetCreateBtn" type="button" data-action="createPlanet">Create planet</button>
+                        </div>
+                        <div id="planetCreateStatus" class="planet-entry-status is-hidden"></div>
                     </div>
 
                     <div id="planetDetailsView" class="is-hidden">
