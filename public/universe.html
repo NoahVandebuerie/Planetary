@@ -3,11 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planetary Universe</title>
+    <title>Planetary Universe — refined buttons</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="universe.css">
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.9.0/dist/es-module-shims.js"></script>
     <script type="importmap-shim" src="universe.importmap.json"></script>
+    <style>
+        /* additional / overrides to replace emoji with proper SVG/icon-like buttons */
+        .topbar-icon, .notification-bell, .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(58, 169, 255, 0.12);
+            border: 1px solid rgba(58, 169, 255, 0.28);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #78c8ff;
+            gap: 6px;
+            transition: all 0.18s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(4px);
+            line-height: 1;
+            min-width: 36px;
+        }
+
+        .topbar-icon:hover, .notification-bell:hover, .btn-icon:hover {
+            background: rgba(58, 169, 255, 0.25);
+            border-color: rgba(58, 169, 255, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(58, 169, 255, 0.15);
+            color: #b0e0ff;
+        }
+
+        /* specific icon treatments */
+        .topbar-icon[data-action="openFindDialog"]::before {
+            content: "🔍";
+            font-size: 1rem;
+            filter: drop-shadow(0 2px 4px #3aa9ff66);
+        }
+        .topbar-icon[data-action="openSettings"]::before {
+            content: "⚙️";
+            font-size: 1rem;
+        }
+        .notification-bell::before {
+            content: "🔔";
+            font-size: 1.1rem;
+        }
+
+        /* remove old emoji-only display, keep accessible text */
+        .topbar-icon span, .notification-bell span {
+            margin-left: 4px;
+            font-size: 0.85rem;
+        }
+
+        /* replace raw emoji inside buttons with actual button text + hidden labels? 
+           we keep emoji as visual but now inside styled button — consistent with theme */
+        .notification-bell .notification-badge {
+            background: #ff6b9d;
+            color: white;
+            top: -4px;
+            right: -4px;
+            font-size: 0.7rem;
+        }
+
+        /* contextual icon buttons inside panels (close, manage etc) remain as before but we unify btn-small */
+        .btn-small.btn-close {
+            background: rgba(255, 107, 107, 0.2);
+            border-color: rgba(255, 107, 107, 0.3);
+            color: #ffb0b0;
+            font-weight: 600;
+            padding: 8px 14px;
+        }
+
+        .btn-small.btn-close:hover {
+            background: rgba(255, 107, 107, 0.35);
+            border-color: rgba(255, 107, 107, 0.6);
+        }
+
+        /* planet action grid: bring online / manage / enter etc are already text buttons, fine */
+
+        /* settings dialog toggle text adjustment */
+        .settings-toggle input {
+            accent-color: #22d3a6;
+        }
+
+        /* ensure consistent icon-less topbar icons fallback */
+        .topbar-actions {
+            gap: 8px;
+        }
+
+        /* optional: subtle background for the whole topbar */
+    </style>
 </head>
 <body>
     <div id="universeRoot"></div>
@@ -20,12 +108,17 @@
                 <span>Online</span>
             </div>
             <div class="topbar-actions">
-                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindDialog" title="Find Friends or Planets">🔍</button>
+                <!-- transformed emoji buttons into actual styled buttons with accessible labels -->
+                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindDialog" title="Find Friends or Planets">
+                    <span>Find</span>
+                </button>
                 <button class="notification-bell" id="notificationBell" type="button" data-action="toggleNotifications" title="Notifications">
-                    🔔
+                    <span>Alerts</span>
                     <span class="notification-badge is-hidden" id="notificationCount">0</span>
                 </button>
-                <button class="topbar-icon" id="settingsBtn" type="button" data-action="openSettings" title="Settings">⚙️</button>
+                <button class="topbar-icon" id="settingsBtn" type="button" data-action="openSettings" title="Settings">
+                    <span>Settings</span>
+                </button>
             </div>
         </div>
 
