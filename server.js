@@ -102,9 +102,25 @@ function buildRoomsSummary() {
             roomId,
             roomName: options.roomName || "",
             participantCount: room.peers.length,
-            accentColor: options.accentColor || ""
+            accentColor: options.accentColor || "",
+            description: options.description || "",
+            maxParticipants: options.maxParticipants || MAX_PEERS_PER_ROOM,
+            status: "online"
         };
     });
+}
+
+function getRoomJoinPayload(roomId) {
+    const room = rooms[roomId];
+    if (!room) return null;
+
+    return {
+        roomId,
+        roomCode: room.roomCode,
+        roomName: room.roomOptions?.roomName || roomId,
+        options: room.roomOptions || {},
+        ownerId: room.ownerId || null
+    };
 }
 
 function emitRoomsSummary() {
@@ -334,6 +350,43 @@ io.on("connection", socket => {
         });
     });
 
+    socket.on("enter-planet", ({ roomId }, callback) => {
+        const respond = typeof callback === "function" ? callback : () => {};
+        const safeRoomId = String(roomId || "").trim();
+
+        if (!safeRoomId) {
+            respond({ ok: false, error: "Planet ID ontbreekt." });
+            return;
+        }
+
+        const room = rooms[safeRoomId];
+        if (!room) {
+            respond({ ok: false, error: "This planet is currently offline." });
+            return;
+        }
+
+        if (room.expiresAt && Date.now() > room.expiresAt) {
+            if (room.peers.length === 0) {
+                recordRoomDeletion(safeRoomId, room, "expired");
+                delete rooms[safeRoomId];
+                emitRoomsSummary();
+            }
+            respond({ ok: false, error: "This planet is no longer available." });
+            return;
+        }
+
+        const maxPeers = room.roomOptions?.maxParticipants || MAX_PEERS_PER_ROOM;
+        if (room.peers.length >= maxPeers) {
+            respond({ ok: false, error: `This planet is full (${room.peers.length}/${maxPeers}).` });
+            return;
+        }
+
+        respond({
+            ok: true,
+            room: getRoomJoinPayload(safeRoomId)
+        });
+    });
+
     socket.on("join", ({ roomId, roomCode, name, create, ttlHours, roomOptions }) => {
         if (!roomId || !roomCode) {
             socket.emit("error", "Room ID of code ontbreekt");
@@ -416,12 +469,7 @@ io.on("connection", socket => {
         socket.to(roomId).emit("peer-joined", { peerId: socket.id, name: userName });
         socket.emit("file-list", rooms[roomId].files);
         socket.emit("joined", {
-            room: {
-                roomId,
-                roomCode,
-                options: rooms[roomId].roomOptions || {},
-                ownerId: rooms[roomId].ownerId || null
-            },
+            room: getRoomJoinPayload(roomId),
             id: socket.id,
             name: userName
         });

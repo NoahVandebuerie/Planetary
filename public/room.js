@@ -53,11 +53,20 @@ const roomSettingsAccent = document.getElementById("roomSettingsAccent");
 const roomSettingsEditors = document.getElementById("roomSettingsEditors");
 const roomSettingsSaveBtn = document.getElementById("roomSettingsSaveBtn");
 const guestLimitsNote = document.getElementById("guestLimitsNote");
+const journeyHeadline = document.getElementById("journeyHeadline");
+const journeySubline = document.getElementById("journeySubline");
+const journeySteps = document.getElementById("journeySteps");
+const peerReadiness = document.getElementById("peerReadiness");
+const arrivalOverlay = document.getElementById("arrivalOverlay");
+const arrivalPlanetName = document.getElementById("arrivalPlanetName");
+const PILOT_NAME_STORAGE_KEY = "planetary:pilotName";
+const ARRIVAL_PLANET_KEY = "planetary:arrivalPlanet";
 
 const CHUNK_SIZE = 64 * 1024;
 const MAX_BUFFER = 2 * 1024 * 1024;
 const GUEST_MAX_FILE_MB = 200;
 const GUEST_MAX_PARTICIPANTS = 2;
+const TRANSFER_STAGES = ["select", "request", "accepted", "transferring", "verifying", "complete"];
 
 let currentRoomId = null;
 let currentRoomCode = null;
@@ -87,6 +96,24 @@ const transfers = new Map(); // transferId -> { file, targetIds, statusByTarget,
 const urlParams = new URLSearchParams(window.location.search);
 const roomIdFromUrl = urlParams.get("roomId");
 const roomCodeFromUrl = urlParams.get("code");
+const usernameFromUrl = urlParams.get("username");
+const planetNameFromUrl = urlParams.get("planet");
+const autoJoinFromUrl = urlParams.get("autoJoin") === "1";
+const sourceFromUrl = urlParams.get("source");
+let autoJoinAttempted = false;
+let lobbyBusy = false;
+
+let usernameFromStorage = "";
+try {
+    usernameFromStorage = window.localStorage.getItem(PILOT_NAME_STORAGE_KEY) || "";
+} catch (_error) {
+    usernameFromStorage = "";
+}
+
+if (usernameInput && (usernameFromUrl || usernameFromStorage)) {
+    usernameInput.value = usernameFromUrl || usernameFromStorage;
+}
+
 if (roomIdInput && roomIdFromUrl) {
     roomIdInput.value = roomIdFromUrl;
 }
@@ -132,11 +159,24 @@ if (modeFromUrl) {
     setLobbyMode("join");
 }
 
+if (sourceFromUrl === "universe") {
+    let arrivalName = planetNameFromUrl || "";
+    try {
+        arrivalName = arrivalName || window.sessionStorage.getItem(ARRIVAL_PLANET_KEY) || "";
+        window.sessionStorage.removeItem(ARRIVAL_PLANET_KEY);
+    } catch (_error) {
+        // Ignore storage issues and continue without the warp overlay name.
+    }
+    showArrivalOverlay(arrivalName);
+    setJourneyState("request", "Opening approach corridor", `Preparing your orbit around ${arrivalName || "the selected planet"}.`);
+}
+
 fetch("/api/me")
     .then(res => (res.ok ? res.json() : null))
     .then(data => {
         if (!data || !data.user) {
             applyGuestModeUI(true);
+            maybeAutoJoinFromUrl();
             return;
         }
         currentUser = data.user;
@@ -145,17 +185,26 @@ fetch("/api/me")
             usernameInput.value = currentUser.username || "";
             usernameInput.disabled = true;
         }
+        try {
+            if (currentUser.username) {
+                window.localStorage.setItem(PILOT_NAME_STORAGE_KEY, currentUser.username);
+            }
+        } catch (_error) {
+            // Ignore storage issues and continue with the in-memory name.
+        }
         applyGuestModeUI(false);
+        maybeAutoJoinFromUrl();
     })
     .catch(() => {
         // guest mode
         applyGuestModeUI(true);
+        maybeAutoJoinFromUrl();
     });
 
 function applyGuestModeUI(isGuest) {
     if (guestLimitsNote) {
         guestLimitsNote.textContent = isGuest
-            ? `Gastlimiet: max ${GUEST_MAX_FILE_MB}MB per bestand, max ${GUEST_MAX_PARTICIPANTS} deelnemers, geen chat of room-aanpassingen.`
+            ? `Gastlimiet: max ${GUEST_MAX_FILE_MB}MB per bestand, max ${GUEST_MAX_PARTICIPANTS} deelnemers, geen chat of planeetaanpassingen.`
             : "Upgrade unlocked: Universe is beschikbaar.";
     }
     if (!isGuest) return;
@@ -197,9 +246,9 @@ window.addEventListener("universe-room-select", event => {
         roomIdInput.focus();
     }
     if (room && room.roomName) {
-        setLobbyStatus(`Room geselecteerd: ${room.roomName}.`, false);
+        setLobbyStatus(`Planeet geselecteerd: ${room.roomName}.`, false);
     } else if (room && room.roomId) {
-        setLobbyStatus(`Room geselecteerd: ${room.roomId}.`, false);
+        setLobbyStatus(`Planeet geselecteerd: ${room.roomId}.`, false);
     }
 });
 
@@ -223,11 +272,137 @@ function setLobbyStatus(message, isError) {
     lobbyStatus.style.color = isError ? "#ffb3b3" : "";
 }
 
+function setLobbyBusy(isBusy, message = "") {
+    lobbyBusy = isBusy;
+    if (joinRoomBtn) joinRoomBtn.disabled = isBusy;
+    if (createRoomBtn) createRoomBtn.disabled = isBusy;
+    if (leaveRoomBtn && !currentRoomId) leaveRoomBtn.disabled = true;
+    if (lobbyModeToggle) {
+        lobbyModeToggle.classList.toggle("is-busy", isBusy);
+    }
+    if (message) {
+        setLobbyStatus(message, false);
+    }
+}
+
 function setConnectionStatus(connected) {
     if (!connectionStatus) return;
     connectionStatus.classList.toggle("online", !!connected);
     connectionStatus.classList.toggle("offline", !connected);
-    connectionStatus.textContent = connected ? "Connected" : "Not connected";
+    connectionStatus.textContent = connected ? "In orbit" : "Out of orbit";
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function formatFileSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+    const sizeMb = bytes / 1024 / 1024;
+    if (sizeMb < 1) {
+        return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+    return `${sizeMb.toFixed(sizeMb >= 10 ? 1 : 2)} MB`;
+}
+
+function getPeerLabel(peerId) {
+    return usersById.get(peerId) || "Unknown pilot";
+}
+
+function getPeerReadinessState(peerId) {
+    const entry = peers.get(peerId);
+    const pcState = entry && entry.pc ? entry.pc.connectionState : "";
+    const channelState = entry && entry.channel ? entry.channel.readyState : "";
+
+    if (channelState === "open") {
+        return { text: "Direct lane open", tone: "online" };
+    }
+    if (pcState === "connecting" || channelState === "connecting") {
+        return { text: "Opening lane", tone: "active" };
+    }
+    if (pcState === "connected") {
+        return { text: "Link locked", tone: "active" };
+    }
+    if (entry) {
+        return { text: "Linking now", tone: "pending" };
+    }
+    return { text: "Awaiting signal", tone: "pending" };
+}
+
+function renderPeerReadiness() {
+    if (!peerReadiness) return;
+
+    const pilots = [{ id: selfId || "self", name: username || currentUser?.username || "You", self: true }]
+        .concat(Array.from(usersById, ([id, name]) => ({ id, name })).filter(user => user.id !== selfId));
+
+    if (pilots.length <= 1) {
+        peerReadiness.innerHTML = `
+            <div class="readiness-item is-empty">
+                <div>
+                    <div class="readiness-name">Orbit check</div>
+                    <div class="readiness-copy">No other pilots are in orbit yet. Invite someone or wait for a join.</div>
+                </div>
+                <span class="readiness-state pending">Waiting</span>
+            </div>
+        `;
+        return;
+    }
+
+    peerReadiness.innerHTML = pilots.map(pilot => {
+        if (pilot.self) {
+            return `
+                <div class="readiness-item self">
+                    <div>
+                        <div class="readiness-name">${escapeHtml(pilot.name)}</div>
+                        <div class="readiness-copy">You are ready to launch payloads from this planet.</div>
+                    </div>
+                    <span class="readiness-state online">Ready</span>
+                </div>
+            `;
+        }
+
+        const readiness = getPeerReadinessState(pilot.id);
+        return `
+            <div class="readiness-item">
+                <div>
+                    <div class="readiness-name">${escapeHtml(pilot.name)}</div>
+                    <div class="readiness-copy">${readiness.text}</div>
+                </div>
+                <span class="readiness-state ${readiness.tone}">${readiness.text}</span>
+            </div>
+        `;
+    }).join("");
+}
+
+function setJourneyState(stage, headline, detail) {
+    if (journeyHeadline) journeyHeadline.textContent = headline;
+    if (journeySubline) journeySubline.textContent = detail;
+    if (!journeySteps) return;
+
+    const activeIndex = TRANSFER_STAGES.indexOf(stage);
+    journeySteps.querySelectorAll(".journey-step").forEach((stepElement, index) => {
+        stepElement.classList.toggle("is-active", index === activeIndex);
+        stepElement.classList.toggle("is-complete", activeIndex > index);
+    });
+}
+
+function showArrivalOverlay(name) {
+    if (!arrivalOverlay) return;
+    if (arrivalPlanetName) {
+        arrivalPlanetName.textContent = name ? `Entering ${name}` : "Entering planet...";
+    }
+    arrivalOverlay.classList.remove("hidden");
+    arrivalOverlay.classList.add("is-visible");
+    arrivalOverlay.setAttribute("aria-hidden", "false");
+}
+
+function hideArrivalOverlay() {
+    if (!arrivalOverlay) return;
+    arrivalOverlay.classList.remove("is-visible");
+    arrivalOverlay.setAttribute("aria-hidden", "true");
+    setTimeout(() => {
+        arrivalOverlay.classList.add("hidden");
+    }, 260);
 }
 
 function normalizeEditors(value) {
@@ -321,7 +496,7 @@ function applyRoomOptions(options, shouldLog) {
     updateTransferAvailability();
     updateRoomSettingsUI();
     if (shouldLog) {
-        logActivity("Room instellingen aangepast.", "Info:");
+        logActivity("Planeetinstellingen aangepast.", "Info:");
     }
 }
 
@@ -342,9 +517,10 @@ function getRadioValue(nodes) {
     return null;
 }
 
-function joinRoom(roomId, roomCode, isCreate, roomOptions) {
+function joinRoom(roomId, roomCode, isCreate, roomOptions, statusMessage) {
     if (!roomId || !roomCode) {
-        setLobbyStatus("Room ID of code ontbreekt. Genereer opnieuw of controleer je input.", true);
+        setLobbyBusy(false);
+        setLobbyStatus("Planet ID of Orbit Code ontbreekt. Genereer opnieuw of controleer je input.", true);
         return;
     }
     const payload = {
@@ -357,7 +533,14 @@ function joinRoom(roomId, roomCode, isCreate, roomOptions) {
         payload.roomOptions = roomOptions;
     }
     socket.emit("join", payload);
-    setLobbyStatus("Verbinden met room...", false);
+    setJourneyState(
+        "request",
+        isCreate ? "Launching a new planet" : "Requesting orbit access",
+        isCreate
+            ? "Generating your planet and opening the first direct space lanes."
+            : "Checking the planet beacon and preparing your arrival."
+    );
+    setLobbyBusy(true, statusMessage || "Verbinden met planeet...");
 }
 
     if (createRoomBtn) {
@@ -401,7 +584,7 @@ function joinRoom(roomId, roomCode, isCreate, roomOptions) {
                 accentColor: "",
                 editors: []
             };
-        joinRoom(currentRoomId, currentRoomCode, true, roomOptions);
+        joinRoom(currentRoomId, currentRoomCode, true, roomOptions, "Creating planet...");
     };
 }
 
@@ -415,12 +598,12 @@ if (joinRoomBtn) {
             return;
         }
         if (!id || !code) {
-            setLobbyStatus("Voer zowel Room ID als Room code in.", true);
+            setLobbyStatus("Voer zowel Planet ID als Orbit Code in.", true);
             return;
         }
         currentRoomId = id;
         currentRoomCode = code;
-        joinRoom(currentRoomId, currentRoomCode, false);
+        joinRoom(currentRoomId, currentRoomCode, false, null, "Entering planet...");
     };
 }
 
@@ -440,8 +623,8 @@ function bindCopyButton(button, getValue, label) {
     };
 }
 
-bindCopyButton(roomIdCopyBtn, () => currentRoomId, "Room ID");
-bindCopyButton(roomCodeCopyBtn, () => currentRoomCode, "Room code");
+bindCopyButton(roomIdCopyBtn, () => currentRoomId, "Planet ID");
+bindCopyButton(roomCodeCopyBtn, () => currentRoomCode, "Orbit Code");
 
 function emitUniverseTransferPulse() {
     if (!currentRoomId) return;
@@ -469,6 +652,35 @@ const ROOM_DEFAULTS = {
     accentColor: "#22d3a6",
     editors: []
 };
+
+function maybeAutoJoinFromUrl() {
+    if (!autoJoinFromUrl || autoJoinAttempted || !roomIdFromUrl || !roomCodeFromUrl) {
+        return;
+    }
+
+    const preferredName = (currentUser && isRegistered)
+        ? currentUser.username
+        : (usernameInput ? usernameInput.value.trim() : "") || usernameFromUrl || usernameFromStorage || "Explorer";
+
+    if (usernameInput && !usernameInput.value.trim()) {
+        usernameInput.value = preferredName;
+    }
+
+    username = preferredName;
+    currentRoomId = roomIdFromUrl;
+    currentRoomCode = roomCodeFromUrl;
+    autoJoinAttempted = true;
+    setLobbyMode("join");
+    joinRoom(
+        currentRoomId,
+        currentRoomCode,
+        false,
+        null,
+        sourceFromUrl === "universe"
+            ? `Entering ${planetNameFromUrl || "planet"} from universe...`
+            : "Entering planet..."
+    );
+}
 
 function hexToRgb(hex) {
     const cleaned = hex.replace("#", "");
@@ -597,6 +809,8 @@ if (themeResetBtn) {
 loadTheme();
 
 setConnectionStatus(false);
+setJourneyState("select", "Choose a payload", "Pick one or more pilots, then drop a file to launch it through a space lane.");
+renderPeerReadiness();
 
 if (roomSettingsSaveBtn) {
     roomSettingsSaveBtn.onclick = () => {
@@ -617,6 +831,9 @@ if (roomSettingsSaveBtn) {
 }
 
 socket.on("error", msg => {
+    setLobbyBusy(false);
+    hideArrivalOverlay();
+    setJourneyState("select", "Launch paused", msg || "We could not open the requested planet. Check the ID or Orbit Code and try again.");
     if (roomPanel && !roomPanel.classList.contains("hidden")) {
         logActivity(msg, "Fout:");
         return;
@@ -642,11 +859,13 @@ socket.on("joined", ({ room, id }) => {
     if (roomIdCopyBtn) roomIdCopyBtn.textContent = currentRoomId || "--";
     if (roomCodeCopyBtn) roomCodeCopyBtn.textContent = currentRoomCode || "--";
     leaveRoomBtn.disabled = false;
+    setLobbyBusy(false);
     setConnectionStatus(true);
+    document.body.classList.add("planet-live");
     lobbyPanel.classList.add("hidden");
     roomPanel.classList.remove("hidden");
     setLobbyStatus("");
-    logActivity(`Je bent in room ${currentRoomId}.`, "Welkom:");
+    logActivity(`Je bent in planeet ${currentRoomId}.`, "Welkom:");
     if (currentRoomId) {
         const codePart = currentRoomCode ? `&code=${currentRoomCode}` : "";
         history.replaceState(null, "", `?roomId=${currentRoomId}${codePart}`);
@@ -655,10 +874,26 @@ socket.on("joined", ({ room, id }) => {
         detail: { roomId: currentRoomId, roomCode: currentRoomCode }
     }));
     applyRoomOptions(joinedOptions || ROOM_DEFAULTS, false);
+    renderPeerReadiness();
+    setJourneyState(
+        "select",
+        joinedOptions?.roomName ? `You are in ${joinedOptions.roomName}` : "You are in orbit",
+        "Select one or more pilots, then drop a file to send a payload. Every step will appear here."
+    );
+    if (sourceFromUrl === "universe") {
+        if (arrivalPlanetName && joinedOptions?.roomName) {
+            arrivalPlanetName.textContent = `Entering ${joinedOptions.roomName}`;
+        }
+        setTimeout(() => hideArrivalOverlay(), 900);
+    } else {
+        hideArrivalOverlay();
+    }
 });
 
 socket.on("disconnect", () => {
     setConnectionStatus(false);
+    renderPeerReadiness();
+    setJourneyState("request", "Orbit signal lost", "Trying to re-establish the beacon and direct space lanes.");
 });
 
 socket.on("room-options", options => {
@@ -671,6 +906,7 @@ socket.on("room-owner", ({ ownerId }) => {
     roomOwnerId = ownerId || null;
     updateRoomSettingsUI();
     updateTransferAvailability();
+    renderPeerReadiness();
     if (roomOwnerId === selfId) {
         logActivity("Je bent nu de host.", "Info:");
     }
@@ -682,6 +918,7 @@ socket.on("room-users", users => {
     renderParticipants(users);
     renderTargets(users);
     ensurePeerConnections(users);
+    renderPeerReadiness();
 });
 
 socket.on("peer-left", peerId => {
@@ -697,7 +934,8 @@ socket.on("peer-left", peerId => {
         selectedTargets.delete(peerId);
         if (selectedTargets.size === 0) selectedTargets.add("all");
     }
-    logActivity("Iemand heeft de room verlaten.", "Info:");
+    renderPeerReadiness();
+    logActivity("Iemand heeft de orbit verlaten.", "Info:");
 });
 
 socket.on("signal", async payload => {
@@ -726,11 +964,11 @@ socket.on("transfer-request", ({ requestId, file, from, fromName }) => {
     emitUniverseTransferPulse();
     const card = document.createElement("div");
     card.className = "request-item";
-    const sizeMb = (file.size / 1024 / 1024).toFixed(2);
     const senderName = fromName || usersById.get(from) || "Onbekend";
     card.innerHTML = `
-        <div class="request-title">${file.name}</div>
-        <div class="queue-meta">${sizeMb} MB • van ${senderName}</div>
+        <div class="request-kicker">Incoming payload</div>
+        <div class="request-title">${escapeHtml(senderName)} wants to send <strong>${escapeHtml(file.name)}</strong></div>
+        <div class="queue-meta">${formatFileSize(file.size)} • Next: accept to open a direct lane.</div>
         <div class="request-actions">
             <button class="accept-btn">Accepteer</button>
             <button class="decline-btn">Weiger</button>
@@ -743,6 +981,7 @@ socket.on("transfer-request", ({ requestId, file, from, fromName }) => {
         declineBtn.disabled = true;
         socket.emit("transfer-response", { room: currentRoomId, requestId, accepted: true, file, to: from });
         logActivity(`Transfer geaccepteerd: ${file.name}`, "Ok:");
+        setJourneyState("accepted", "Incoming payload accepted", `Opening a direct lane from ${senderName} for ${file.name}.`);
         setTimeout(() => card.remove(), 600);
     };
     declineBtn.onclick = () => {
@@ -750,6 +989,7 @@ socket.on("transfer-request", ({ requestId, file, from, fromName }) => {
         declineBtn.disabled = true;
         socket.emit("transfer-response", { room: currentRoomId, requestId, accepted: false, file, to: from });
         logActivity(`Transfer geweigerd: ${file.name}`, "Info:");
+        setJourneyState("select", "Payload declined", `You declined ${file.name}. Nothing was transferred.`);
         setTimeout(() => card.remove(), 600);
     };
     incomingRequests.appendChild(card);
@@ -795,10 +1035,13 @@ function renderParticipants(users) {
     users.forEach(user => {
         const row = document.createElement("div");
         row.className = "participant";
+        const readiness = user.id === selfId
+            ? { text: "Ready", tone: "online" }
+            : getPeerReadinessState(user.id);
         row.innerHTML = `
             <span class="dot"></span>
             <span class="name">${user.name}</span>
-            <span class="tag">${user.id === selfId ? "jij" : "online"}</span>
+            <span class="tag ${readiness.tone}">${user.id === selfId ? "you" : readiness.text}</span>
         `;
         participantsList.appendChild(row);
     });
@@ -820,7 +1063,15 @@ function renderTargets(users) {
 function createTargetButton(label, id) {
     const btn = document.createElement("button");
     btn.className = "target-chip";
-    btn.textContent = label;
+    const readiness = id === "all"
+        ? { text: "Broadcast lane", tone: "active" }
+        : getPeerReadinessState(id);
+    btn.innerHTML = `
+        <span class="target-name">${escapeHtml(label)}</span>
+        <span class="target-state ${readiness.tone}">${readiness.text}</span>
+    `;
+    btn.title = id === "all" ? "Send to every pilot in orbit" : `Send to ${label}`;
+    btn.setAttribute("aria-label", btn.title);
     if (selectedTargets.has(id)) btn.classList.add("active");
 
     btn.onclick = () => {
@@ -837,6 +1088,14 @@ function createTargetButton(label, id) {
             if (selectedTargets.size === 0) selectedTargets.add("all");
         }
         renderTargets(Array.from(usersById, ([userId, name]) => ({ id: userId, name })));
+        const selected = resolveTargets();
+        setJourneyState(
+            "select",
+            "Target locked",
+            selected.length === 0
+                ? "Choose a pilot in orbit before launching a payload."
+                : `Payloads will launch toward ${describeTargets(selected)} once you drop a file.`
+        );
     };
     return btn;
 }
@@ -868,6 +1127,7 @@ function ensurePeer(peerId, allowInitiator) {
     };
 
     pc.onconnectionstatechange = () => {
+        renderPeerReadiness();
         if (pc.connectionState === "connected") {
             logActivity(`Verbonden met ${usersById.get(peerId) || "peer"}.`, "P2P:");
         }
@@ -897,7 +1157,16 @@ function setupChannel(peerId, channel) {
     peers.set(peerId, entry);
 
     channel.onopen = () => {
+        renderPeerReadiness();
         logActivity(`Data channel open met ${usersById.get(peerId) || "peer"}.`, "P2P:");
+    };
+
+    channel.onclose = () => {
+        renderPeerReadiness();
+    };
+
+    channel.onerror = () => {
+        renderPeerReadiness();
     };
 
     channel.onmessage = event => handleIncoming(peerId, event.data);
@@ -928,6 +1197,7 @@ function handleIncoming(peerId, data) {
                     }
                 });
                 logActivity(`Ontvangst gestart: ${parsed.name}`, "Ontvang:");
+                setJourneyState("transferring", "Incoming payload in transit", `${parsed.name} is traveling from ${getPeerLabel(peerId)} to your planet now.`);
                 return;
             }
         } catch (e) {
@@ -956,36 +1226,94 @@ function assembleAndDownload(metadata, chunks) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     logActivity(`Download gestart: ${metadata.name}`, "Ontvang:");
+    setJourneyState("complete", "Payload ready", `${metadata.name} arrived safely and is ready on your device.`);
+}
+
+function describeTargets(targetIds) {
+    if (!Array.isArray(targetIds) || targetIds.length === 0) {
+        return "no active targets";
+    }
+    if (targetIds.length === 1) {
+        return getPeerLabel(targetIds[0]);
+    }
+    if (targetIds.length === 2) {
+        return `${getPeerLabel(targetIds[0])} and ${getPeerLabel(targetIds[1])}`;
+    }
+    return `${targetIds.length} pilots`;
+}
+
+function setTransferStage(transfer, stage, statusText, progress = null) {
+    transfer.stage = stage;
+    transfer.element.dataset.stage = stage;
+
+    const steps = transfer.element.querySelectorAll("[data-transfer-stage]");
+    const activeIndex = TRANSFER_STAGES.indexOf(stage);
+    steps.forEach((stepElement, index) => {
+        stepElement.classList.toggle("is-complete", activeIndex > index);
+        stepElement.classList.toggle("is-active", activeIndex === index);
+        stepElement.classList.toggle("is-failed", stage === "failed");
+    });
+
+    const progressFill = transfer.element.querySelector(".queue-progress-fill");
+    if (progressFill) {
+        const width = progress == null
+            ? (stage === "complete" ? 100 : stage === "failed" ? 100 : Math.max(0, activeIndex) / (TRANSFER_STAGES.length - 1) * 100)
+            : Math.max(0, Math.min(100, progress * 100));
+        progressFill.style.width = `${width}%`;
+    }
+
+    const stageBadge = transfer.element.querySelector(".queue-stage");
+    if (stageBadge) {
+        stageBadge.textContent = stage === "failed" ? "Failed" : stage.charAt(0).toUpperCase() + stage.slice(1);
+    }
+
+    updateTransferStatus(transfer, statusText);
 }
 
 function addTransferToQueue(transfer) {
     const item = document.createElement("div");
     item.className = "queue-item";
-    const sizeMb = (transfer.file.size / 1024 / 1024).toFixed(2);
     item.innerHTML = `
-        <div class="queue-title">${transfer.file.name}</div>
-        <div class="queue-meta">${sizeMb} MB</div>
+        <div class="queue-header">
+            <div>
+                <div class="queue-title">${escapeHtml(transfer.file.name)}</div>
+                <div class="queue-meta">${formatFileSize(transfer.file.size)} payload for ${escapeHtml(describeTargets(transfer.targetIds))}</div>
+            </div>
+            <div class="queue-stage">Request</div>
+        </div>
+        <div class="queue-progress">
+            <div class="queue-progress-fill"></div>
+        </div>
+        <div class="queue-steps">
+            <span class="queue-step is-complete" data-transfer-stage="select">Select</span>
+            <span class="queue-step is-active" data-transfer-stage="request">Request</span>
+            <span class="queue-step" data-transfer-stage="accepted">Accepted</span>
+            <span class="queue-step" data-transfer-stage="transferring">Transfer</span>
+            <span class="queue-step" data-transfer-stage="verifying">Verify</span>
+            <span class="queue-step" data-transfer-stage="complete">Ready</span>
+        </div>
         <div class="queue-tags"></div>
-        <div class="status-line">Wachten op acceptatie...</div>
+        <div class="status-line">Awaiting permission from ${describeTargets(transfer.targetIds)}.</div>
     `;
     transferQueue.prepend(item);
     transfer.element = item;
     updateTransferTags(transfer);
+    setTransferStage(transfer, "request", `Awaiting permission from ${describeTargets(transfer.targetIds)}.`);
 }
 
 function updateTransferTags(transfer) {
     const tagWrap = transfer.element.querySelector(".queue-tags");
     tagWrap.innerHTML = "";
     const labelMap = {
-        pending: "wachten",
-        accepted: "geaccepteerd",
-        sending: "verzenden",
-        sent: "klaar",
-        declined: "geweigerd"
+        pending: "Awaiting permission",
+        accepted: "Docked",
+        sending: "In transit",
+        sent: "Delivered",
+        declined: "Declined"
     };
     transfer.targetIds.forEach(targetId => {
         const tag = document.createElement("span");
-        const name = usersById.get(targetId) || "onbekend";
+        const name = usersById.get(targetId) || "unknown";
         const status = transfer.statusByTarget.get(targetId) || "pending";
         tag.className = `tag-chip ${status}`;
         tag.textContent = `${name}: ${labelMap[status] || status}`;
@@ -1000,6 +1328,7 @@ function updateTransferStatus(transfer, text) {
 
 async function requestApprovals(targetIds, file) {
     emitUniverseTransferPulse();
+    setJourneyState("request", "Permission requested", `Waiting for ${describeTargets(targetIds)} to accept ${file.name}.`);
     const tasks = targetIds.map(targetId => {
         const requestId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise(resolve => {
@@ -1020,16 +1349,18 @@ async function requestApprovals(targetIds, file) {
     return Promise.all(tasks);
 }
 
-async function sendFileToPeer(file, peerId, transfer) {
+async function sendFileToPeer(file, peerId, transfer, targetIndex, totalTargets) {
     const channel = await waitForChannelOpen(peerId, 12000);
     if (!channel) {
         transfer.statusByTarget.set(peerId, "declined");
         updateTransferTags(transfer);
-        updateTransferStatus(transfer, "Kanaal niet beschikbaar.");
+        setTransferStage(transfer, "failed", `Direct lane to ${getPeerLabel(peerId)} was not available.`);
         return;
     }
 
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const progressBase = targetIndex / totalTargets;
+    const progressSpan = 1 / totalTargets;
     const metadata = JSON.stringify({
         type: "metadata",
         name: file.name,
@@ -1038,11 +1369,19 @@ async function sendFileToPeer(file, peerId, transfer) {
         mime: file.type || "application/octet-stream"
     });
     channel.send(metadata);
+    setTransferStage(transfer, "transferring", `Transferring ${file.name} to ${getPeerLabel(peerId)}.`, progressBase);
     for (let i = 0; i < totalChunks; i++) {
         const slice = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
         const buffer = await slice.arrayBuffer();
         await waitForBuffer(channel);
         channel.send(buffer);
+        const chunkProgress = (i + 1) / totalChunks;
+        setTransferStage(
+            transfer,
+            "transferring",
+            `Payload is moving through the lane to ${getPeerLabel(peerId)} (${Math.round(chunkProgress * 100)}%).`,
+            progressBase + chunkProgress * progressSpan * 0.88
+        );
     }
 }
 
@@ -1081,15 +1420,18 @@ function waitForChannelOpen(peerId, timeoutMs) {
 async function startTransfer(file) {
     if (!canSendFiles()) {
         logActivity("Alleen de host kan bestanden versturen.", "Info:");
+        setJourneyState("select", "Transfer blocked", "Only the current host can launch payloads on this planet.");
         return;
     }
     if (!isRegistered && file && file.size > GUEST_MAX_FILE_MB * 1024 * 1024) {
         logActivity(`Gastlimiet: ${file.name} is groter dan ${GUEST_MAX_FILE_MB}MB.`, "Info:");
+        setJourneyState("select", "Payload too large", `Guests can launch files up to ${GUEST_MAX_FILE_MB} MB on this planet.`);
         return;
     }
     const targetIds = resolveTargets();
     if (targetIds.length === 0) {
         logActivity("Geen beschikbare ontvangers.", "Info:");
+        setJourneyState("select", "No pilot selected", "Choose a pilot in orbit before you launch a payload.");
         return;
     }
     const transferId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1097,11 +1439,13 @@ async function startTransfer(file) {
         id: transferId,
         file,
         targetIds,
-        statusByTarget: new Map()
+        statusByTarget: new Map(),
+        stage: "request"
     };
     targetIds.forEach(id => transfer.statusByTarget.set(id, "pending"));
     transfers.set(transferId, transfer);
     addTransferToQueue(transfer);
+    setJourneyState("request", "Payload locked", `${file.name} is queued for ${describeTargets(targetIds)}. Waiting for permission.`);
 
     const responses = await requestApprovals(targetIds, file);
     responses.forEach(({ targetId, accepted, timeout }) => {
@@ -1114,19 +1458,26 @@ async function startTransfer(file) {
 
     const acceptedTargets = responses.filter(r => r.accepted).map(r => r.targetId);
     if (acceptedTargets.length === 0) {
-        updateTransferStatus(transfer, "Geen acceptaties ontvangen.");
+        setTransferStage(transfer, "failed", "No pilot accepted this payload.");
+        setJourneyState("select", "No acceptance received", "This payload stayed docked. Try another pilot or ask them to accept.");
         return;
     }
 
-    updateTransferStatus(transfer, "Versturen...");
-    for (const targetId of acceptedTargets) {
+    setTransferStage(transfer, "accepted", `Permission granted by ${describeTargets(acceptedTargets)}. Opening direct lane.`);
+    setJourneyState("accepted", "Permission granted", `Direct lane approved for ${file.name}. Opening the transfer route now.`);
+
+    for (const [index, targetId] of acceptedTargets.entries()) {
         transfer.statusByTarget.set(targetId, "sending");
         updateTransferTags(transfer);
-        await sendFileToPeer(file, targetId, transfer);
+        await sendFileToPeer(file, targetId, transfer, index, acceptedTargets.length);
         transfer.statusByTarget.set(targetId, "sent");
         updateTransferTags(transfer);
     }
-    updateTransferStatus(transfer, "Klaar");
+    setTransferStage(transfer, "verifying", `Verifying ${file.name} before final delivery.`, 0.95);
+    setJourneyState("verifying", "Verifying payload", "Checking that the file arrived intact before we mark it ready.");
+    await delay(520);
+    setTransferStage(transfer, "complete", `Payload delivered to ${describeTargets(acceptedTargets)}.`, 1);
+    setJourneyState("complete", "Payload delivered", `${file.name} arrived successfully. You can launch another payload whenever you are ready.`);
 }
 
 function resolveTargets() {
@@ -1153,11 +1504,11 @@ function appendChatMessage({ name, text, time, isSelf }) {
 function sendChatMessage() {
     if (!currentRoomId) return;
     if (!isRegistered) {
-        logActivity("Chat is alleen beschikbaar voor ingelogde users.", "Info:");
+        logActivity("Chat is alleen beschikbaar voor ingelogde pilots.", "Info:");
         return;
     }
     if (currentRoomOptions.allowChat === false) {
-        logActivity("Chat is uitgeschakeld in deze room.", "Info:");
+        logActivity("Chat is uitgeschakeld op deze planeet.", "Info:");
         return;
     }
     const text = chatInput.value.trim();
@@ -1206,11 +1557,16 @@ function cleanupRoomState() {
     if (roomIdCopyBtn) roomIdCopyBtn.textContent = "--";
     if (roomCodeCopyBtn) roomCodeCopyBtn.textContent = "--";
     leaveRoomBtn.disabled = true;
+    setLobbyBusy(false);
+    document.body.classList.remove("planet-live");
     roomPanel.classList.add("hidden");
     lobbyPanel.classList.remove("hidden");
-    setLobbyStatus("Je hebt de room verlaten.", false);
+    setLobbyStatus("Je hebt de orbit verlaten.", false);
     setConnectionStatus(false);
     applyRoomOptions(ROOM_DEFAULTS, false);
+    setJourneyState("select", "Choose a payload", "Pick one or more pilots, then drop a file to launch it through a space lane.");
+    renderPeerReadiness();
+    hideArrivalOverlay();
 }
 
 dropzone.addEventListener("dragover", event => {
@@ -1227,6 +1583,9 @@ dropzone.addEventListener("drop", event => {
         return;
     }
     const files = Array.from(event.dataTransfer.files || []);
+    if (files.length > 0) {
+        setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
+    }
     files.forEach(startTransfer);
 });
 fileInput.addEventListener("change", event => {
@@ -1235,6 +1594,9 @@ fileInput.addEventListener("change", event => {
         return;
     }
     const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+        setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
+    }
     files.forEach(startTransfer);
     fileInput.value = "";
 });
