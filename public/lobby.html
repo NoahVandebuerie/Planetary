@@ -8,6 +8,13 @@
 </head>
 <body class="lobby-page">
 <div class="ambient"></div>
+<div id="arrivalOverlay" class="arrival-overlay hidden" aria-hidden="true">
+    <div class="arrival-shell">
+        <div class="arrival-kicker">Warp corridor engaged</div>
+        <div id="arrivalPlanetName" class="arrival-title">Entering planet...</div>
+        <div class="arrival-subtitle">Synchronizing orbit and opening direct space lanes.</div>
+    </div>
+</div>
 <div class="app">
     <header class="topbar">
         <div class="brand">
@@ -18,10 +25,10 @@
             </div>
         </div>
         <div class="room-tools">
-            <div id="connectionStatus" class="connection-pill offline">Not connected</div>
-            <div class="room-code">Room ID <button id="roomIdCopy" class="copy-pill" type="button">--</button></div>
-            <div class="room-code">Code <button id="roomCodeCopy" class="copy-pill" type="button">--</button></div>
-            <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave</button>
+            <div id="connectionStatus" class="connection-pill offline">Out of orbit</div>
+            <div class="room-code">Planet ID <button id="roomIdCopy" class="copy-pill" type="button">--</button></div>
+            <div class="room-code">Orbit Code <button id="roomCodeCopy" class="copy-pill" type="button">--</button></div>
+            <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave orbit</button>
         </div>
     </header>
 
@@ -30,11 +37,11 @@
             <div class="lobby-header">
                 <div>
                     <h2>Lobby</h2>
-                    <p class="panel-sub">Kies je naam en maak of join een room met ID + Code.</p>
+                    <p class="panel-sub">Kies je naam en maak of betreed een planeet met Planet ID + Orbit Code.</p>
                 </div>
                 <div id="lobbyModeToggle" class="mode-toggle join-active">
-                    <button class="mode-option active" type="button" data-mode="join">Join room</button>
-                    <button class="mode-option" type="button" data-mode="create">Create room</button>
+                    <button class="mode-option active" type="button" data-mode="join">Enter planet</button>
+                    <button class="mode-option" type="button" data-mode="create">Create planet</button>
                 </div>
             </div>
 
@@ -45,26 +52,26 @@
 
             <div id="joinFields">
                 <div class="field-row">
-                    <label for="roomIdInput">Room ID</label>
+                    <label for="roomIdInput">Planet ID</label>
                     <input id="roomIdInput" type="text" placeholder="Bijv. 8f3k9b2q">
                 </div>
                 <div class="field-row">
-                    <label for="roomCodeInput">Room code</label>
+                    <label for="roomCodeInput">Orbit Code</label>
                     <input id="roomCodeInput" type="text" placeholder="Bijv. 42X9K7">
                 </div>
                 <div class="button-row">
-                    <button id="joinRoomBtn" class="primary-btn">Join room</button>
+                    <button id="joinRoomBtn" class="primary-btn">Enter planet</button>
                 </div>
             </div>
 
             <div id="createFields" class="hidden">
                 <div class="field-row">
-                    <label for="roomNameInput">Room naam</label>
+                    <label for="roomNameInput">Planet name</label>
                     <input id="roomNameInput" type="text" placeholder="Bijv. Team Sync">
                 </div>
                 <div class="field-row">
-                    <label for="roomDescriptionInput">Room omschrijving</label>
-                    <textarea id="roomDescriptionInput" rows="3" placeholder="Korte beschrijving van deze room"></textarea>
+                    <label for="roomDescriptionInput">Planet description</label>
+                    <textarea id="roomDescriptionInput" rows="3" placeholder="Korte beschrijving van deze planeet"></textarea>
                 </div>
                 <div class="field-row">
                     <label for="roomEditorsInput">Editors (optioneel)</label>
@@ -83,7 +90,7 @@
                         </label>
                         <label class="radio-card">
                             <input type="radio" name="transferMode" value="owner" required>
-                            <span>Alleen owner kan sturen</span>
+                            <span>Alleen host kan sturen</span>
                         </label>
                     </div>
                 </div>
@@ -94,11 +101,11 @@
                     </label>
                 </div>
                 <div class="field-row">
-                    <label for="roomAccentColor">Room accentkleur</label>
+                    <label for="roomAccentColor">Planet accentkleur</label>
                     <input id="roomAccentColor" type="color" value="#3aa9ff">
                 </div>
                 <div class="button-row">
-                    <button id="createRoomBtn" class="primary-btn blue-btn">Create room</button>
+                    <button id="createRoomBtn" class="primary-btn blue-btn">Create planet</button>
                 </div>
             </div>
 
@@ -109,13 +116,27 @@
         <section class="panel hidden" id="roomPanel">
             <div class="grid">
                 <div class="col">
+                    <div class="card flight-card">
+                        <div class="card-title">Flight Deck</div>
+                        <div id="journeyHeadline" class="journey-headline">Choose a payload</div>
+                        <div id="journeySubline" class="journey-subline">Pick one or more pilots, then drop a file to launch it through a space lane.</div>
+                        <div id="journeySteps" class="journey-steps" aria-label="Transfer journey">
+                            <span class="journey-step is-active" data-stage="select">Select</span>
+                            <span class="journey-step" data-stage="request">Request</span>
+                            <span class="journey-step" data-stage="accepted">Accepted</span>
+                            <span class="journey-step" data-stage="transferring">Transfer</span>
+                            <span class="journey-step" data-stage="verifying">Verify</span>
+                            <span class="journey-step" data-stage="complete">Ready</span>
+                        </div>
+                        <div id="peerReadiness" class="readiness-list"></div>
+                    </div>
                     <div class="card hidden" id="roomSettingsCard">
-                        <div class="card-title">Room settings</div>
+                        <div class="card-title">Planet settings</div>
                         <div class="field-row">
                             <label for="roomSettingsTransferMode">Transfer‑mode</label>
                             <select id="roomSettingsTransferMode">
                                 <option value="all">Iedereen kan sturen</option>
-                                <option value="owner">Alleen owner kan sturen</option>
+                                <option value="owner">Alleen host kan sturen</option>
                             </select>
                         </div>
                         <div class="field-row">
@@ -125,7 +146,7 @@
                             </label>
                         </div>
                         <div class="field-row">
-                            <label for="roomSettingsAccent">Room accentkleur</label>
+                            <label for="roomSettingsAccent">Planet accentkleur</label>
                             <input id="roomSettingsAccent" type="color" value="#3aa9ff">
                         </div>
                         <div class="field-row">

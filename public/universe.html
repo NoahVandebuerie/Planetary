@@ -5,320 +5,261 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planetary Universe</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="universe.css">
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.9.0/dist/es-module-shims.js"></script>
-    <script type="importmap-shim">
-        {
-          "imports": {
-            "react": "https://esm.sh/react@18.2.0",
-            "react-dom": "https://esm.sh/react-dom@18.2.0",
-            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "three": "https://esm.sh/three@0.160.0",
-            "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.17?external=react,react-dom,three",
-            "@react-three/fiber/": "https://esm.sh/@react-three/fiber@8.15.17/",
-            "@react-three/drei": "https://esm.sh/@react-three/drei@9.105.2?external=react,react-dom,three,@react-three/fiber"
-          }
-        }
-    </script>
+    <script type="importmap-shim" src="universe.importmap.json"></script>
 </head>
-<body class="universe-page">
-<div class="ambient"></div>
-<div class="universe-shell">
-    <div id="universeGate" class="universe-gate">
-        <div class="universe-gate-card">
-            <div class="title">Planetary Universe</div>
-            <p class="panel-sub">Login om planeten te zien en te beheren.</p>
-            <div class="auth-tabs">
-                <button class="auth-tab active" data-tab="universe-login">Login</button>
-                <button class="auth-tab" data-tab="universe-register">Register</button>
+<body>
+    <div id="universeRoot"></div>
+
+    <div class="universe-ui">
+        <div class="topbar">
+            <div class="pilot-name" id="pilotName">Commander</div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                <span>Online</span>
             </div>
-            <div class="auth-body active" data-tab-body="universe-login">
-                <label for="universeLoginIdentifier">E-mail of gebruikersnaam</label>
-                <input id="universeLoginIdentifier" type="text" placeholder="jouw@email.com">
-                <label for="universeLoginPass">Wachtwoord</label>
-                <input id="universeLoginPass" type="password" placeholder="••••••••">
-                <button id="universeLoginBtn" class="primary-btn" type="button">Login</button>
+            <div class="topbar-actions">
+                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindDialog" title="Find Friends or Planets">🔍</button>
+                <button class="notification-bell" id="notificationBell" type="button" data-action="toggleNotifications" title="Notifications">
+                    🔔
+                    <span class="notification-badge is-hidden" id="notificationCount">0</span>
+                </button>
+                <button class="topbar-icon" id="settingsBtn" type="button" data-action="openSettings" title="Settings">⚙️</button>
             </div>
-            <div class="auth-body" data-tab-body="universe-register">
-                <label for="universeRegName">Gebruikersnaam</label>
-                <input id="universeRegName" type="text" placeholder="Jouw naam">
-                <label for="universeRegEmail">E-mail</label>
-                <input id="universeRegEmail" type="text" placeholder="jouw@email.com">
-                <label for="universeRegPass">Wachtwoord</label>
-                <input id="universeRegPass" type="password" placeholder="Min. 8 tekens">
-                <button id="universeRegisterBtn" class="primary-btn" type="button">Register</button>
+        </div>
+
+        <div class="universe-layout">
+            <div class="universe-column universe-column-left">
+                <section class="universe-panel panel-rail">
+                    <div class="panel-kicker">Social Radar</div>
+                    <div class="sidebar-title">👥 Friends Online</div>
+                    <div class="panel-scroll" id="friendsList"></div>
+                </section>
+
+                <section class="universe-panel panel-rail">
+                    <div class="panel-kicker">Saved Routes</div>
+                    <div class="sidebar-title">🪐 Your Planets</div>
+                    <div class="panel-scroll" id="savedPlanets"></div>
+                </section>
             </div>
-            <div id="universeAuthStatus" class="auth-note"></div>
-            <div class="button-row">
-                <a id="universeSimpleBtn" class="ghost-btn" href="lobby.html?mode=join">Ga naar lobby</a>
+
+            <div class="universe-center">
+                <div class="universe-hud-card">
+                    <div class="panel-kicker">Universe Flow</div>
+                    <div class="hud-title">Click a planet to focus it</div>
+                    <div class="hud-copy">The command deck on the right is where joining, hosting, access, and planet control now live.</div>
+                </div>
+            </div>
+
+            <div class="universe-column universe-column-right">
+                <section id="notificationsPanel" class="universe-panel panel-stack is-hidden">
+                    <div class="panel-kicker">Signal Traffic</div>
+                    <div class="panel-title">📬 Notifications</div>
+                    <div class="panel-scroll" id="notificationsList"></div>
+                </section>
+
+                <section class="universe-panel command-panel">
+                    <div id="planetsView">
+                        <div class="panel-kicker">Access Layer</div>
+                        <div class="panel-title">🪐 Planet Command</div>
+                        <div class="command-subtitle">Select a destination to inspect access, bring it online, or enter orbit.</div>
+                        <div class="panel-scroll" id="planetsList"></div>
+                    </div>
+
+                    <div id="planetDetailsView" class="is-hidden">
+                        <div class="details-header">
+                            <div>
+                                <div class="panel-kicker">Planet Command</div>
+                                <div class="panel-title no-margin" id="planetTitle">Planet</div>
+                            </div>
+                            <button class="btn-small btn-close" id="closePlanetDetailsBtn" type="button" data-action="closePlanetDetails">✕ Close</button>
+                        </div>
+
+                        <div class="details-card">
+                            <div id="planetStats"></div>
+                        </div>
+
+                        <div id="planetDescription" class="planet-description"></div>
+
+                        <div class="planet-action-grid">
+                            <button class="btn-secondary" id="hostSelectedPlanetBtn" type="button" data-action="hostSelectedPlanet">Bring Online</button>
+                            <button class="btn-small" id="manageSelectedPlanetBtn" type="button" data-action="openSelectedPlanetSettings">Manage</button>
+                        </div>
+
+                        <div id="keyInputSection" class="is-hidden">
+                            <label class="field-label is-small" for="planetKey">Access Key Required</label>
+                            <div class="key-input-row">
+                                <input type="password" id="planetKey" class="message-input is-inline" placeholder="Enter access key...">
+                                <button class="btn-small" id="verifyPlanetKeyBtn" type="button" data-action="verifyPlanetKey">Verify</button>
+                            </div>
+                        </div>
+
+                        <button class="btn-primary" id="enterPlanetBtn" type="button" data-action="enterPlanet">Enter Planet</button>
+                        <div id="planetEntryStatus" class="planet-entry-status is-hidden"></div>
+
+                        <div id="waitListSection" class="waitlist-card is-hidden">
+                            <div id="planetAccessNotice" class="waitlist-message">⚠️ Planet is full. Join waitlist?</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="messagingPanel" class="universe-panel panel-stack is-hidden">
+                    <div class="panel-kicker">Direct Signal</div>
+                    <div class="panel-title" id="chatTitle">💬 Direct Message</div>
+                    <div class="message-box" id="messagesList"></div>
+                    <div class="button-group">
+                        <input type="text" class="message-input is-inline" id="messageInput" placeholder="Type message...">
+                        <button class="btn-small" id="sendBtn" type="button" data-action="sendDirectMessage">Send</button>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
-    <div id="universeRoot" class="universe-canvas"></div>
-    <div class="universe-overlay">
-        <div class="app">
-            <header class="topbar">
-                <div class="brand">
-                <div class="logo">PL</div>
+
+    <div id="findDialog" class="modal-overlay is-hidden" data-overlay-close="closeFindDialog">
+        <div class="modal-content">
+            <div class="modal-title">🔍 Find Friends or Planets</div>
+            <input type="text" id="findInput" class="modal-input" placeholder="Search by name...">
+            <div id="findResults" class="transfer-panel is-medium"></div>
+            <div class="modal-buttons">
+                <button class="btn-small btn-close is-flex" id="closeFindDialogBtn" type="button" data-action="closeFindDialog">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsDialog" class="modal-overlay is-hidden" data-overlay-close="closeSettings">
+        <div class="modal-content">
+            <div class="modal-title">⚙️ Settings</div>
+
+            <div class="field-group">
+                <label class="field-label" for="pilotNameInput">Pilot Name</label>
+                <input type="text" id="pilotNameInput" class="modal-input is-inline" placeholder="Enter pilot name...">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Audio</label>
+                <label class="settings-toggle" for="audioToggle">
+                    <input type="checkbox" id="audioToggle">
+                    Enable sound effects
+                </label>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Camera</label>
+                <label class="settings-toggle" for="autoRotateToggle">
+                    <input type="checkbox" id="autoRotateToggle" checked>
+                    Auto rotate view
+                </label>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-primary is-flex" id="saveSettingsBtn" type="button" data-action="saveSettings">Save</button>
+                <button class="btn-small btn-close is-flex" id="closeSettingsBtn" type="button" data-action="closeSettings">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="planetSettingsDialog" class="modal-overlay is-hidden" data-overlay-close="closePlanetSettings">
+        <div class="modal-content">
+            <div class="modal-title" id="settingsPlanetTitle">Planet Settings</div>
+
+            <div class="field-group">
+                <label class="field-label">Status</label>
+                <div class="settings-status-actions">
+                    <button class="btn-small btn-success" id="hostBtn" type="button" data-action="hostPlanet">🟢 Host Online</button>
+                    <button class="btn-small btn-offline" id="offlineBtn" type="button" data-action="offlinePlanet">🔴 Go Offline</button>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <div id="planetStatusInfo">Status: Offline</div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-small btn-danger-soft btn-danger-text is-flex" id="deletePlanetBtn" type="button" data-action="deletePlanet">Delete</button>
+                <button class="btn-small btn-close is-flex" id="closePlanetSettingsBtn" type="button" data-action="closePlanetSettings">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="roomTransferModal" class="modal-overlay is-hidden">
+        <div class="modal-content modal-90">
+            <div class="transfer-modal-header">
                 <div>
-                    <div class="title">Planetary Lobby</div>
-                    <div class="subtitle">Max 4 deelnemers • direct P2P</div>
+                    <h2 class="transfer-title" id="roomTitle">Planet Transfer</h2>
+                    <div class="transfer-room-code" id="roomCodeDisplay">Planet ID: --</div>
                 </div>
-                </div>
-                <div class="room-tools">
-                    <div id="connectionStatus" class="connection-pill offline">Not connected</div>
-                    <div class="room-code">Room ID <button id="roomIdCopy" class="copy-pill" type="button">--</button></div>
-                    <div class="room-code">Code <button id="roomCodeCopy" class="copy-pill" type="button">--</button></div>
-                    <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave</button>
-                </div>
-            </header>
-
-            <main class="universe-main">
-                <section class="panel" id="lobbyPanel">
-                    <div class="lobby-header">
-                        <div>
-                            <h2>Lobby</h2>
-                            <p class="panel-sub">Kies je naam en maak of join een room met ID + Code.</p>
-                        </div>
-                        <div id="lobbyModeToggle" class="mode-toggle join-active">
-                            <button class="mode-option active" type="button" data-mode="join">Join room</button>
-                            <button class="mode-option" type="button" data-mode="create">Create room</button>
-                        </div>
-                    </div>
-
-                    <div class="field-row">
-                        <label for="usernameInput">Gebruikersnaam (verplicht)</label>
-                        <input id="usernameInput" type="text" placeholder="Bijv. Noah">
-                    </div>
-
-                    <div id="joinFields">
-                        <div class="field-row">
-                            <label for="roomIdInput">Room ID</label>
-                            <input id="roomIdInput" type="text" placeholder="Bijv. 8f3k9b2q">
-                        </div>
-                        <div class="field-row">
-                            <label for="roomCodeInput">Room code</label>
-                            <input id="roomCodeInput" type="text" placeholder="Bijv. 42X9K7">
-                        </div>
-                        <div class="button-row">
-                            <button id="joinRoomBtn" class="primary-btn">Join room</button>
-                        </div>
-                    </div>
-
-                    <div id="createFields" class="hidden">
-                        <div class="field-row">
-                            <label for="roomNameInput">Room naam</label>
-                            <input id="roomNameInput" type="text" placeholder="Bijv. Team Sync">
-                        </div>
-                        <div class="field-row">
-                            <label for="roomDescriptionInput">Room omschrijving</label>
-                            <textarea id="roomDescriptionInput" rows="3" placeholder="Korte beschrijving van deze room"></textarea>
-                        </div>
-                        <div class="field-row">
-                            <label for="roomEditorsInput">Editors (optioneel)</label>
-                            <input id="roomEditorsInput" type="text" placeholder="Bijv. noah, sara">
-                        </div>
-                        <div class="field-row">
-                            <label for="maxParticipantsRange">Max deelnemers (verplicht) <span id="maxParticipantsValue">4</span></label>
-                            <input id="maxParticipantsRange" type="range" min="2" max="4" step="1" value="4">
-                        </div>
-                        <div class="field-row">
-                            <div class="field-label">Transfer‑mode (verplicht)</div>
-                            <div class="radio-group">
-                                <label class="radio-card">
-                                    <input type="radio" name="transferMode" value="all" checked required>
-                                    <span>Iedereen kan sturen</span>
-                                </label>
-                                <label class="radio-card">
-                                    <input type="radio" name="transferMode" value="owner" required>
-                                    <span>Alleen owner kan sturen</span>
-                                </label>
-                            </div>
-                        </div>
-                        <div class="field-row">
-                            <label class="toggle-row">
-                                <input id="allowChatToggle" type="checkbox" checked>
-                                <span>Chat toestaan</span>
-                            </label>
-                        </div>
-                        <div class="field-row">
-                            <label for="roomAccentColor">Room accentkleur</label>
-                            <input id="roomAccentColor" type="color" value="#3aa9ff">
-                        </div>
-                        <div class="button-row">
-                            <button id="createRoomBtn" class="primary-btn blue-btn">Create room</button>
-                        </div>
-                    </div>
-
-                    <div id="lobbyStatus" class="status muted"></div>
-                </section>
-
-                <section class="panel hidden" id="roomPanel">
-                    <div class="grid">
-                        <div class="col">
-                            <div class="card hidden" id="roomSettingsCard">
-                                <div class="card-title">Room settings</div>
-                                <div class="field-row">
-                                    <label for="roomSettingsTransferMode">Transfer‑mode</label>
-                                    <select id="roomSettingsTransferMode">
-                                        <option value="all">Iedereen kan sturen</option>
-                                        <option value="owner">Alleen owner kan sturen</option>
-                                    </select>
-                                </div>
-                                <div class="field-row">
-                                    <label class="toggle-row">
-                                        <input id="roomSettingsAllowChat" type="checkbox" checked>
-                                        <span>Chat toestaan</span>
-                                    </label>
-                                </div>
-                                <div class="field-row">
-                                    <label for="roomSettingsAccent">Room accentkleur</label>
-                                    <input id="roomSettingsAccent" type="color" value="#3aa9ff">
-                                </div>
-                                <div class="field-row">
-                                    <label for="roomSettingsEditors">Editors (optioneel)</label>
-                                    <input id="roomSettingsEditors" type="text" placeholder="Bijv. noah, sara">
-                                </div>
-                                <div class="button-row">
-                                    <button id="roomSettingsSaveBtn" class="primary-btn blue-btn">Save settings</button>
-                                </div>
-                                <div class="status muted">Alleen de host kan dit aanpassen.</div>
-                            </div>
-                            <div class="card">
-                                <div class="card-title">Deelnemers</div>
-                                <div id="participantsList" class="participants"></div>
-                            </div>
-                            <div class="card">
-                                <div class="card-title">Verstuur Naar</div>
-                                <div id="targetsList" class="targets"></div>
-                            </div>
-                            <div class="card">
-                                <div class="card-title">Binnenkomende verzoeken</div>
-                                <div id="incomingRequests" class="requests"></div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="card drop-card">
-                                <div id="dropzone" class="dropzone">
-                                    <input id="fileInput" type="file" multiple>
-                                    <div class="drop-content">
-                                        <div class="drop-icon">UPLOAD</div>
-                                        <div class="drop-title">Sleep bestanden hierheen</div>
-                                        <div class="drop-sub">of klik om te kiezen</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-title">Transfers</div>
-                                <div id="transferQueue" class="queue"></div>
-                            </div>
-                            <div class="card">
-                                <div class="card-title">Activiteit</div>
-                                <div id="activityLog" class="log"></div>
-                            </div>
-                            <div class="card chat-card">
-                                <div class="card-title">Chat</div>
-                                <div id="chatMessages" class="chat-messages"></div>
-                                <div class="chat-input-row">
-                                    <input id="chatInput" type="text" placeholder="Typ je bericht...">
-                                    <button id="sendChatBtn" class="primary-btn">Send</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="themePanel" class="panel theme-panel hidden">
-                    <div class="theme-header">
-                        <span>Customize</span>
-                        <button id="themeCloseBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
-                    </div>
-                    <div class="theme-grid">
-                        <label>Join accent
-                            <input id="themePrimary" type="color" value="#ffb224">
-                        </label>
-                        <label>Create accent
-                            <input id="themeCreate" type="color" value="#3aa9ff">
-                        </label>
-                        <label>Secondary accent
-                            <input id="themeAccent" type="color" value="#22d3a6">
-                        </label>
-                        <label>Background
-                            <input id="themeBg" type="color" value="#0d2430">
-                        </label>
-                        <label>Font
-                            <select id="themeFont">
-                                <option value="'Space Grotesk', sans-serif">Space Grotesk</option>
-                                <option value="'Sora', sans-serif">Sora</option>
-                                <option value="'Manrope', sans-serif">Manrope</option>
-                                <option value="'DM Sans', sans-serif">DM Sans</option>
-                                <option value="'Fraunces', serif">Fraunces</option>
-                            </select>
-                        </label>
-                    </div>
-                    <div class="theme-actions">
-                        <button id="themeSaveBtn" class="primary-btn" type="button">Save</button>
-                        <button id="themeResetBtn" class="ghost-btn" type="button">Reset</button>
-                    </div>
-                </section>
-                <div class="theme-toggle-footer">
-                    <button id="themeToggleBtn" class="icon-btn" type="button" aria-label="Customize">Theme</button>
-                </div>
-            </main>
-            <aside id="universeSidebar" class="panel universe-sidebar">
-                <div class="card">
-                <div class="card-title">Planets list</div>
-                <div id="universeRoomsList" class="rooms-list"></div>
-                </div>
-                <div class="card">
-                <div class="card-title">Planets</div>
-                <div class="button-row">
-                    <button id="universeOpenJoin" class="ghost-btn" type="button">Join panel</button>
-                    <button id="universeOpenCreate" class="ghost-btn" type="button">Create panel</button>
+                <div class="transfer-header-actions">
+                    <div id="connectionStatus" class="connection-status">In orbit</div>
+                    <button class="btn-small btn-close" id="closeRoomTransferBtn" type="button" data-action="closeRoomTransfer">✕ Leave orbit</button>
                 </div>
             </div>
-                <div class="card">
-                    <div class="card-title">Connected Users</div>
-                    <div id="universeUsersList" class="participants"></div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Message</div>
-                    <div class="field-row">
-                        <label for="universeUserSelect">User</label>
-                        <select id="universeUserSelect"></select>
+
+            <div class="transfer-modal-body">
+                <div class="transfer-column">
+                    <div class="transfer-panel">
+                        <div class="transfer-panel-title">👥 Users</div>
+                        <div id="participantsList" class="transfer-list">
+                            <div class="empty-accent">🟢 You</div>
+                        </div>
                     </div>
-                    <div class="field-row">
-                        <label for="universeMessageInput">Bericht</label>
-                        <input id="universeMessageInput" type="text" placeholder="Typ je bericht...">
-                    </div>
-                    <div class="button-row">
-                        <button id="universeMessageBtn" class="primary-btn" type="button">Send</button>
-                    </div>
-                </div>
-                <div class="card">
-                <div class="card-title">Invite to planet</div>
-                <div class="field-row">
-                    <label for="inviteRoomId">Room ID</label>
-                    <input id="inviteRoomId" type="text" placeholder="Bijv. 8f3k9b2q">
-                </div>
-                    <div class="field-row">
-                        <label for="inviteRoomCode">Room code</label>
-                        <input id="inviteRoomCode" type="text" placeholder="Bijv. 42X9K7">
-                    </div>
-                    <div class="button-row">
-                        <button id="universeInviteBtn" class="primary-btn blue-btn" type="button">Invite</button>
+
+                    <div class="transfer-panel">
+                        <div class="transfer-panel-title">📤 Send To</div>
+                        <div id="targetsList" class="transfer-list">
+                            <div class="muted-note">No targets available</div>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                <div class="card-title">Planetary inbox</div>
-                <div id="universeInbox" class="log"></div>
+
+                <div class="transfer-column">
+                    <div class="dropzone" id="dropzone">
+                        <div class="dropzone-icon">📁</div>
+                        <div class="dropzone-title">Drop files here</div>
+                        <div class="dropzone-subtitle">or click to select</div>
+                        <input type="file" id="fileInput" class="hidden-input" multiple>
+                    </div>
+
+                    <div class="transfer-panel is-fill">
+                        <div class="transfer-panel-title">⚡ Transfers</div>
+                        <div id="transferQueue" class="transfer-list">
+                            <div class="muted-note">No active transfers</div>
+                        </div>
+                    </div>
+
+                    <div class="transfer-panel is-short">
+                        <div class="transfer-panel-title">📝 Activity Log</div>
+                        <div id="activityLog" class="transfer-list">
+                            <div class="muted-note">Connection established</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="transfer-column">
+                    <div class="transfer-panel is-medium">
+                        <div class="transfer-panel-title">📥 Incoming</div>
+                        <div id="incomingRequests" class="transfer-list">
+                            <div class="muted-note">No incoming requests</div>
+                        </div>
+                    </div>
+
+                    <div class="transfer-panel chat-panel">
+                        <div class="transfer-panel-title">💬 Chat</div>
+                        <div id="chatMessages" class="chat-messages">
+                            <div class="muted-note">Connected to planet</div>
+                        </div>
+                        <div class="transfer-chat-input">
+                            <input type="text" id="chatInput" class="chat-input" placeholder="Type message...">
+                            <button class="btn-small" id="sendChatBtn" type="button" data-action="sendChatMessage">Send</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </aside>
         </div>
     </div>
-</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script type="module-shim" src="universe.js"></script>
-<script src="room.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module-shim" src="universe.js"></script>
 </body>
 </html>
