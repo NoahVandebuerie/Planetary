@@ -14,13 +14,13 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: rgba(58, 169, 255, 0.12);
-            border: 1px solid rgba(58, 169, 255, 0.28);
+            background: var(--accent-soft);
+            border: 1px solid var(--panel-edge);
             border-radius: 10px;
             padding: 8px 12px;
             font-size: 0.9rem;
             font-weight: 500;
-            color: #78c8ff;
+            color: var(--accent);
             gap: 6px;
             transition: all 0.18s ease;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -30,18 +30,18 @@
         }
 
         .topbar-icon:hover, .notification-bell:hover, .btn-icon:hover {
-            background: rgba(58, 169, 255, 0.25);
-            border-color: rgba(58, 169, 255, 0.6);
+            background: rgba(var(--accent-rgb), 0.25);
+            border-color: var(--panel-edge-strong);
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(58, 169, 255, 0.15);
+            box-shadow: 0 10px 20px var(--panel-glow);
             color: #b0e0ff;
         }
 
         /* specific icon treatments */
-        .topbar-icon[data-action="openFindDialog"]::before {
-            content: "🔍";
+        .topbar-icon[data-action="openFindPanel"]::before {
+            content: "👤";
             font-size: 1rem;
-            filter: drop-shadow(0 2px 4px #3aa9ff66);
+            filter: drop-shadow(0 1px 2px rgba(var(--accent-rgb), 0.16));
         }
         .topbar-icon[data-action="openSettings"]::before {
             content: "⚙️";
@@ -61,7 +61,7 @@
         /* replace raw emoji inside buttons with actual button text + hidden labels? 
            we keep emoji as visual but now inside styled button — consistent with theme */
         .notification-bell .notification-badge {
-            background: #ff6b9d;
+            background: var(--danger);
             color: white;
             top: -4px;
             right: -4px;
@@ -70,23 +70,23 @@
 
         /* contextual icon buttons inside panels (close, manage etc) remain as before but we unify btn-small */
         .btn-small.btn-close {
-            background: rgba(255, 107, 107, 0.2);
-            border-color: rgba(255, 107, 107, 0.3);
+            background: rgba(var(--danger-rgb), 0.2);
+            border-color: rgba(var(--danger-rgb), 0.3);
             color: #ffb0b0;
             font-weight: 600;
             padding: 8px 14px;
         }
 
         .btn-small.btn-close:hover {
-            background: rgba(255, 107, 107, 0.35);
-            border-color: rgba(255, 107, 107, 0.6);
+            background: rgba(var(--danger-rgb), 0.35);
+            border-color: rgba(var(--danger-rgb), 0.6);
         }
 
         /* planet action grid: bring online / manage / enter etc are already text buttons, fine */
 
         /* settings dialog toggle text adjustment */
         .settings-toggle input {
-            accent-color: #22d3a6;
+            accent-color: var(--success);
         }
 
         /* ensure consistent icon-less topbar icons fallback */
@@ -102,15 +102,18 @@
 
     <div class="universe-ui">
         <div class="topbar">
-            <div class="pilot-name" id="pilotName">Commander</div>
+            <div class="pilot-identity">
+                <div class="pilot-name" id="pilotName">Commander</div>
+                    <button class="pilot-id-chip" id="pilotUserIdChip" type="button" data-action="copyUserId" title="Copy user ID">#usr_commander</button>
+            </div>
             <div class="status-badge">
                 <div class="status-dot"></div>
                 <span>Online</span>
             </div>
             <div class="topbar-actions">
                 <!-- transformed emoji buttons into actual styled buttons with accessible labels -->
-                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindDialog" title="Find Friends or Planets">
-                    <span>Find</span>
+                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindPanel" title="Add Friend">
+                    <span>Add Friend</span>
                 </button>
                 <button class="notification-bell" id="notificationBell" type="button" data-action="toggleNotifications" title="Notifications">
                     <span>Alerts</span>
@@ -119,6 +122,26 @@
                 <button class="topbar-icon" id="settingsBtn" type="button" data-action="openSettings" title="Settings">
                     <span>Settings</span>
                 </button>
+            </div>
+
+            <div id="topbarFindPanel" class="topbar-find-panel is-hidden" aria-hidden="true">
+                <div class="topbar-find-head">
+                    <div>
+                        <div class="panel-kicker no-margin">Add Friend</div>
+                        <div class="topbar-find-title">Add someone by user ID</div>
+                    </div>
+                    <button class="btn-small btn-close" type="button" data-action="closeFindPanel">Close</button>
+                </div>
+                <div class="topbar-find-grid is-single">
+                    <div class="topbar-find-field">
+                        <label class="field-label" for="findUserIdInput">User ID</label>
+                        <div class="button-group">
+                            <input type="text" id="findUserIdInput" class="modal-input is-inline" placeholder="#usr_noah">
+                            <button class="btn-small" type="button" data-action="addContactByUserId">Add Friend</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="findStatus" class="planet-entry-status is-hidden"></div>
             </div>
         </div>
 
@@ -146,33 +169,116 @@
             </div>
 
             <div class="universe-column universe-column-right">
-                <section id="notificationsPanel" class="universe-panel panel-stack is-hidden">
-                    <div class="panel-kicker">Signal Traffic</div>
-                    <div class="panel-title">📬 Notifications</div>
-                    <div class="panel-scroll" id="notificationsList"></div>
+                <section id="utilityPanel" class="universe-panel utility-panel" aria-hidden="true">
+                    <div class="utility-panel-header">
+                        <div>
+                            <div class="panel-kicker" id="utilityPanelKicker">Signal Traffic</div>
+                            <div class="panel-title no-margin" id="utilityPanelTitle">Alerts</div>
+                        </div>
+                        <button class="btn-small btn-close" id="closeUtilityPanelBtn" type="button" data-action="closeUtilityPanel">Close</button>
+                    </div>
+
+                    <div id="alertsToolView" class="utility-view">
+                        <div class="panel-scroll" id="notificationsList"></div>
+                    </div>
+
+                    <div id="settingsToolView" class="utility-view is-hidden">
+                        <div class="field-group">
+                            <label class="field-label" for="pilotNameInput">Pilot Name (account)</label>
+                            <input type="text" id="pilotNameInput" class="modal-input is-inline" placeholder="Managed by your account" readonly>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label" for="panelThemeSelect">Panel Theme</label>
+                            <select id="panelThemeSelect" class="modal-input">
+                                <option value="neon-cyan">Neon Cyan</option>
+                                <option value="solar-flare">Solar Flare</option>
+                                <option value="aurora-rose">Aurora Rose</option>
+                            </select>
+                            <div class="field-help">Themes recolor the command panels without flattening the space scene.</div>
+                        </div>
+
+                        <div class="field-group">
+                            <div class="field-label">Panel Colors</div>
+                            <div class="theme-color-grid">
+                                <label class="theme-color-control" for="panelAccentColor">
+                                    <span>Accent</span>
+                                    <input id="panelAccentColor" type="color" value="#78c8ff">
+                                </label>
+                                <label class="theme-color-control" for="panelSurfaceColor">
+                                    <span>Surface</span>
+                                    <input id="panelSurfaceColor" type="color" value="#07131b">
+                                </label>
+                                <label class="theme-color-control" for="panelSuccessColor">
+                                    <span>Success</span>
+                                    <input id="panelSuccessColor" type="color" value="#22d3a6">
+                                </label>
+                                <label class="theme-color-control" for="panelDangerColor">
+                                    <span>Alert</span>
+                                    <input id="panelDangerColor" type="color" value="#ff6b9d">
+                                </label>
+                            </div>
+                            <div class="theme-settings-actions">
+                                <button class="btn-small" id="resetThemeColorsBtn" type="button" data-action="resetThemeColors">Reset Colors</button>
+                            </div>
+                            <div class="field-help">Changes preview immediately. Save keeps them, Cancel restores the previous panel palette.</div>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Audio</label>
+                            <label class="settings-toggle" for="audioToggle">
+                                <input type="checkbox" id="audioToggle">
+                                Enable sound effects
+                            </label>
+                        </div>
+
+                        <div class="field-group">
+                            <label class="field-label">Camera</label>
+                            <label class="settings-toggle" for="autoRotateToggle">
+                                <input type="checkbox" id="autoRotateToggle" checked>
+                                Auto rotate view
+                            </label>
+                        </div>
+
+                        <div class="modal-buttons">
+                            <button class="btn-primary is-flex" id="saveSettingsBtn" type="button" data-action="saveSettings">Save</button>
+                            <button class="btn-small btn-danger-soft is-flex" id="logoutSettingsBtn" type="button" data-action="logoutFromSettings">Logout</button>
+                            <button class="btn-small btn-close is-flex" id="closeSettingsBtn" type="button" data-action="closeSettings">Cancel</button>
+                        </div>
+                    </div>
                 </section>
 
-                <section class="universe-panel command-panel">
+                <section id="accessPanel" class="universe-panel access-panel">
                     <div id="planetsView">
-                        <div class="panel-kicker">Access Layer</div>
-                        <div class="panel-title">🪐 Planet Command</div>
-                        <div class="command-subtitle">Select a destination to inspect access, bring it online, or enter orbit.</div>
+                        <div class="panel-kicker">Access Panel</div>
+                        <div class="details-header">
+                            <div class="panel-title no-margin">🪐 Access Panel</div>
+                        </div>
+                        <div class="command-subtitle">Browse public planets below or select one from your saved routes. Private planets require an exact Planet ID and password.</div>
                         <div class="panel-scroll" id="planetsList"></div>
-<div class="divider-line"></div>
-<div class="panel-kicker">Find Planet</div>
-<div class="field-group">
-    <label class="field-label" for="planetFindId">Planet ID</label>
-    <input id="planetFindId" type="text" class="message-input" placeholder="planet-alpha">
-</div>
-<div class="field-group">
-    <label class="field-label" for="planetFindKey">Access key (optioneel)</label>
-    <input id="planetFindKey" type="password" class="message-input" placeholder="••••••••">
-</div>
-<div class="button-group">
-    <button class="btn-secondary" id="planetFindBtn" type="button" data-action="findPlanet">Find planet</button>
-</div>
-<div id="planetFindStatus" class="planet-entry-status is-hidden"></div>                        <div class="divider-line"></div>
-                        <div class="panel-kicker">Create New Planet</div>
+                        <div class="divider-line"></div>
+                        <div class="panel-kicker">Connect Planet</div>
+                        <div class="field-group">
+                            <label class="field-label" for="planetFindId">Planet ID</label>
+                            <input id="planetFindId" type="text" class="message-input" placeholder="planet-alpha">
+                        </div>
+                        <div class="field-group is-hidden" id="planetFindKeyGroup">
+                            <label class="field-label" for="planetFindKey">Enter password</label>
+                            <input id="planetFindKey" type="password" class="message-input" placeholder="••••••••">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-secondary" id="planetFindBtn" type="button" data-action="findPlanet">Connect planet</button>
+                        </div>
+                        <div class="field-help">Only public planets appear in this panel. Private planets can only be opened with their Planet ID and password.</div>
+                        <div id="planetFindStatus" class="planet-entry-status is-hidden"></div>
+                    </div>
+                </section>
+
+                <section id="planetCommandPanel" class="universe-panel command-panel">
+                    <div id="planetCommandView">
+                        <div class="panel-kicker">Planet Command Panel</div>
+                        <div class="panel-title">🛰️ Planet Command</div>
+                        <div class="command-subtitle">Create a new planet and manage the currently selected one.</div>
                         <div class="field-group">
                             <label class="field-label" for="planetCreateName">Room naam</label>
                             <input id="planetCreateName" type="text" class="message-input" placeholder="Bijv. Team Sync">
@@ -210,6 +316,7 @@
                             <button class="btn-primary" id="planetCreateBtn" type="button" data-action="createPlanet">Create planet</button>
                         </div>
                         <div id="planetCreateStatus" class="planet-entry-status is-hidden"></div>
+                        <div class="divider-line"></div>
                     </div>
 
                     <div id="planetDetailsView" class="is-hidden">
@@ -218,7 +325,9 @@
                                 <div class="panel-kicker">Planet Command</div>
                                 <div class="panel-title no-margin" id="planetTitle">Planet</div>
                             </div>
-                            <button class="btn-small btn-close" id="closePlanetDetailsBtn" type="button" data-action="closePlanetDetails">✕ Close</button>
+                            <div class="transfer-header-actions">
+                                <button class="btn-small btn-close" id="closePlanetDetailsBtn" type="button" data-action="closePlanetDetails">✕ Exit</button>
+                            </div>
                         </div>
 
                         <div class="details-card">
@@ -228,7 +337,7 @@
                         <div id="planetDescription" class="planet-description"></div>
 
                         <div class="planet-action-grid">
-                            <button class="btn-secondary" id="hostSelectedPlanetBtn" type="button" data-action="hostSelectedPlanet">Bring Online</button>
+                            <button class="btn-secondary" id="hostSelectedPlanetBtn" type="button" data-action="hostSelectedPlanet">Connect</button>
                             <button class="btn-small" id="manageSelectedPlanetBtn" type="button" data-action="openSelectedPlanetSettings">Manage</button>
                         </div>
 
@@ -262,49 +371,6 @@
         </div>
     </div>
 
-    <div id="findDialog" class="modal-overlay is-hidden" data-overlay-close="closeFindDialog">
-        <div class="modal-content">
-            <div class="modal-title">🔍 Find Friends or Planets</div>
-            <input type="text" id="findInput" class="modal-input" placeholder="Search by name...">
-            <div id="findResults" class="transfer-panel is-medium"></div>
-            <div class="modal-buttons">
-                <button class="btn-small btn-close is-flex" id="closeFindDialogBtn" type="button" data-action="closeFindDialog">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="settingsDialog" class="modal-overlay is-hidden" data-overlay-close="closeSettings">
-        <div class="modal-content">
-            <div class="modal-title">⚙️ Settings</div>
-
-            <div class="field-group">
-                <label class="field-label" for="pilotNameInput">Pilot Name</label>
-                <input type="text" id="pilotNameInput" class="modal-input is-inline" placeholder="Enter pilot name...">
-            </div>
-
-            <div class="field-group">
-                <label class="field-label">Audio</label>
-                <label class="settings-toggle" for="audioToggle">
-                    <input type="checkbox" id="audioToggle">
-                    Enable sound effects
-                </label>
-            </div>
-
-            <div class="field-group">
-                <label class="field-label">Camera</label>
-                <label class="settings-toggle" for="autoRotateToggle">
-                    <input type="checkbox" id="autoRotateToggle" checked>
-                    Auto rotate view
-                </label>
-            </div>
-
-            <div class="modal-buttons">
-                <button class="btn-primary is-flex" id="saveSettingsBtn" type="button" data-action="saveSettings">Save</button>
-                <button class="btn-small btn-close is-flex" id="closeSettingsBtn" type="button" data-action="closeSettings">Cancel</button>
-            </div>
-        </div>
-    </div>
-
     <div id="planetSettingsDialog" class="modal-overlay is-hidden" data-overlay-close="closePlanetSettings">
         <div class="modal-content">
             <div class="modal-title" id="settingsPlanetTitle">Planet Settings</div>
@@ -332,12 +398,12 @@
         <div class="modal-content modal-90">
             <div class="transfer-modal-header">
                 <div>
-                    <h2 class="transfer-title" id="roomTitle">Planet Transfer</h2>
+                    <h2 class="transfer-title" id="roomTitle">Transfer Room</h2>
                     <div class="transfer-room-code" id="roomCodeDisplay">Planet ID: --</div>
                 </div>
                 <div class="transfer-header-actions">
-                    <div id="connectionStatus" class="connection-status">In orbit</div>
-                    <button class="btn-small btn-close" id="closeRoomTransferBtn" type="button" data-action="closeRoomTransfer">✕ Leave orbit</button>
+                    <div id="connectionStatus" class="connection-status">Connected</div>
+                    <button class="btn-small btn-close" id="closeRoomTransferBtn" type="button" data-action="closeRoomTransfer">✕ Close transfer</button>
                 </div>
             </div>
 

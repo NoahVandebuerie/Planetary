@@ -2,89 +2,19 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
 const nodemailer = require("nodemailer");
-const crypto = require("crypto");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const AUTH_BACKEND_URL = process.env.AUTH_BACKEND_URL || "http://127.0.0.1:8000";
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
-
-app.post("/api/register", (req, res) => {
-    const { username, email, password } = req.body || {};
-    const safeName = String(username || "").trim();
-    const safeEmail = String(email || "").trim().toLowerCase();
-    const safePass = String(password || "");
-    if (!safeName || !safeEmail || !safePass) {
-        return res.status(400).json({ error: "Vul alle velden in." });
-    }
-    if (safePass.length < 6) {
-        return res.status(400).json({ error: "Wachtwoord is te kort." });
-    }
-    const nameKey = safeName.toLowerCase();
-    if (usersByName[nameKey] || usersByEmail[safeEmail]) {
-        return res.status(409).json({ error: "Gebruiker bestaat al." });
-    }
-    const id = uuidv4();
-    const salt = crypto.randomBytes(12).toString("hex");
-    const hash = hashPassword(safePass, salt);
-    const user = { id, username: safeName, email: safeEmail, salt, hash, createdAt: Date.now() };
-    users[id] = user;
-    usersByName[nameKey] = id;
-    usersByEmail[safeEmail] = id;
-    const token = createSession(id);
-    res.setHeader("Set-Cookie", `p2p_session=${token}; HttpOnly; SameSite=Lax; Path=/`);
-    return res.json({ user: { id, username: user.username, email: user.email } });
-});
-
-app.post("/api/login", (req, res) => {
-    const { identifier, password } = req.body || {};
-    const safeId = String(identifier || "").trim().toLowerCase();
-    const safePass = String(password || "");
-    if (!safeId || !safePass) {
-        return res.status(400).json({ error: "Vul alle velden in." });
-    }
-    const userId = usersByEmail[safeId] || usersByName[safeId];
-    if (!userId) {
-        return res.status(401).json({ error: "Onjuiste login." });
-    }
-    const user = users[userId];
-    const hash = hashPassword(safePass, user.salt);
-    if (hash !== user.hash) {
-        return res.status(401).json({ error: "Onjuiste login." });
-    }
-    const token = createSession(userId);
-    res.setHeader("Set-Cookie", `p2p_session=${token}; HttpOnly; SameSite=Lax; Path=/`);
-    return res.json({ user: { id: user.id, username: user.username, email: user.email } });
-});
-
-app.post("/api/logout", (req, res) => {
-    const cookies = parseCookies(req.headers.cookie);
-    const token = cookies.p2p_session;
-    if (token && sessions[token]) {
-        delete sessions[token];
-    }
-    res.setHeader("Set-Cookie", "p2p_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
-    return res.json({ ok: true });
-});
-
-app.get("/api/me", (req, res) => {
-    const user = getUserBySession(req);
-    if (!user) return res.status(401).json({ user: null });
-    return res.json({ user: { id: user.id, username: user.username, email: user.email } });
-});
 
 const MAX_PEERS_PER_ROOM = 4;
 const GUEST_MAX_FILE_MB = 200;
 const GUEST_MAX_PARTICIPANTS = 2;
 const rooms = {};
-const users = {};
-const usersByEmail = {};
-const usersByName = {};
-const sessions = {};
 const onlineUsers = new Map();
 const roomHistory = [];
 const MAX_ROOM_HISTORY = 40;
@@ -93,6 +23,93 @@ let transporter = null;
 let transporterReady = false;
 
 const ALLOWED_TTL_HOURS = new Set([1, 12, 24]);
+
+async function sendAuthRequest(targetPath, { method = "GET", body, cookieHeader } = {}) {
+    const headers = {};
+    if (cookieHeader) {
+        headers.cookie = cookieHeader;
+    }
+    if (body !== undefined) {
+        headers["content-type"] = "application/json";
+    }
+
+    const response = await fetch(`${AUTH_BACKEND_URL}${targetPath}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(5000)
+    });
+
+    let payload = null;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+        payload = await response.json();
+    } else {
+        const text = await response.text();
+        payload = text ? { error: text } : {};
+    }
+
+    return { response, payload };
+}
+
+function normalizeAuthPayload(payload) {
+    if (!payload || typeof payload !== "object") {
+        return { error: "Auth service gaf geen bruikbare response." };
+    }
+    if (typeof payload.detail === "string" && !payload.error) {
+        return { ...payload, error: payload.detail };
+    }
+    return payload;
+}
+
+async function proxyAuthRequest(req, res, targetPath) {
+    try {
+        const { response, payload } = await sendAuthRequest(targetPath, {
+            method: req.method,
+            body: req.method === "GET" ? undefined : (req.body || {}),
+            cookieHeader: req.headers.cookie || ""
+        });
+
+        const cookies = response.headers.getSetCookie();
+        if (cookies.length > 0) {
+            res.setHeader("Set-Cookie", cookies);
+        }
+
+        return res.status(response.status).json(normalizeAuthPayload(payload));
+    } catch (error) {
+        console.error(`Auth proxy fout voor ${targetPath}:`, error.message);
+        return res.status(503).json({ error: "Auth backend niet bereikbaar." });
+    }
+}
+
+async function fetchAuthenticatedUser(cookieHeader) {
+    if (!cookieHeader) return null;
+
+    try {
+        const { response, payload } = await sendAuthRequest("/api/me", {
+            method: "GET",
+            cookieHeader
+        });
+
+        if (!response.ok || !payload || !payload.user) {
+            return null;
+        }
+
+        return payload.user;
+    } catch (error) {
+        console.error("Kon auth backend niet bereiken voor socket-validatie:", error.message);
+        return null;
+    }
+}
+
+app.post("/api/register", (req, res) => proxyAuthRequest(req, res, "/api/register"));
+app.post("/api/login", (req, res) => proxyAuthRequest(req, res, "/api/login"));
+app.post("/api/logout", (req, res) => proxyAuthRequest(req, res, "/api/logout"));
+app.get("/api/me", (req, res) => proxyAuthRequest(req, res, "/api/me"));
+app.get("/api/demo/bootstrap", (req, res) => proxyAuthRequest(req, res, "/api/demo/bootstrap"));
+app.get("/api/event-log", (req, res) => proxyAuthRequest(req, res, `/api/event-log${req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""}`));
+app.post("/api/event-log", (req, res) => proxyAuthRequest(req, res, "/api/event-log"));
+app.use(express.static(path.join(__dirname, "public")));
 
 function buildRoomsSummary() {
     return Object.keys(rooms).map(roomId => {
@@ -138,46 +155,6 @@ function normalizeEditors(value) {
         .split(",")
         .map(item => item.trim().toLowerCase())
         .filter(Boolean);
-}
-
-function parseCookies(cookieHeader) {
-    const cookies = {};
-    if (!cookieHeader) return cookies;
-    cookieHeader.split(";").forEach(part => {
-        const [key, ...rest] = part.trim().split("=");
-        if (!key) return;
-        cookies[key] = decodeURIComponent(rest.join("="));
-    });
-    return cookies;
-}
-
-function hashPassword(password, salt) {
-    return crypto
-        .createHash("sha256")
-        .update(`${salt}:${password}`)
-        .digest("hex");
-}
-
-function createSession(userId) {
-    const token = crypto.randomBytes(24).toString("hex");
-    sessions[token] = { userId, createdAt: Date.now() };
-    return token;
-}
-
-function getUserBySession(req) {
-    const cookies = parseCookies(req.headers.cookie);
-    const token = cookies.p2p_session;
-    if (!token || !sessions[token]) return null;
-    const session = sessions[token];
-    return users[session.userId] || null;
-}
-
-function getUserFromSocket(socket) {
-    const cookies = parseCookies(socket.handshake.headers.cookie || "");
-    const token = cookies.p2p_session;
-    if (!token || !sessions[token]) return null;
-    const session = sessions[token];
-    return users[session.userId] || null;
 }
 
 function emitUniverseUsers() {
@@ -288,9 +265,13 @@ app.get("/uploaded-files/:room", (req, res) => {
     res.json({ files: rooms[room].files || [] });
 });
 
+io.use(async (socket, next) => {
+    socket.user = await fetchAuthenticatedUser(socket.handshake.headers.cookie || "");
+    next();
+});
+
 io.on("connection", socket => {
     console.log("Nieuwe verbinding:", socket.id);
-    socket.user = getUserFromSocket(socket);
 
     if (socket.user) {
         onlineUsers.set(socket.id, {
