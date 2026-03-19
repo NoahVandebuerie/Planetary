@@ -400,11 +400,10 @@ io.on("connection", socket => {
                 roomOptions: {
                     roomName: options.roomName || "",
                     description: options.description || "",
-                    transferMode: isGuest ? "all" : (options.transferMode || "all"),
                     allowChat: isGuest ? false : (options.allowChat !== false),
                     accentColor: options.accentColor || "",
                     maxParticipants,
-                    editors: isGuest ? [] : normalizeEditors(options.editors)
+                    editors: []
                 }
             };
         } else {
@@ -485,10 +484,6 @@ io.on("connection", socket => {
             return;
         }
         const options = rooms[room].roomOptions || {};
-        if (options.transferMode === "owner" && rooms[room].ownerId && socket.id !== rooms[room].ownerId) {
-            socket.emit("error", "Alleen de host kan transfers starten.");
-            return;
-        }
         const fromName = rooms[room].users[socket.id] || "Onbekend";
         if (to === "all") {
             socket.to(room).emit("transfer-request", { requestId, file, from: socket.id, fromName });
@@ -541,11 +536,9 @@ io.on("connection", socket => {
     socket.on("room-options-update", ({ room, options }) => {
         if (!rooms[room]) return;
         const roomData = rooms[room];
-        const userName = String(roomData.users[socket.id] || "").trim().toLowerCase();
         const isOwner = roomData.ownerId === socket.id;
         const isRegistered = !!roomData.registered[socket.id];
-        const editors = Array.isArray(roomData.roomOptions?.editors) ? roomData.roomOptions.editors : [];
-        const canEdit = isRegistered && (isOwner || editors.includes(userName));
+        const canEdit = isRegistered && isOwner;
         if (!canEdit) {
             socket.emit("error", "Je hebt geen rechten om room instellingen te wijzigen.");
             return;
@@ -553,9 +546,6 @@ io.on("connection", socket => {
         const current = roomData.roomOptions || {};
         const next = { ...current };
         if (options && typeof options === "object") {
-            if (options.transferMode === "all" || options.transferMode === "owner") {
-                next.transferMode = options.transferMode;
-            }
             if (typeof options.allowChat === "boolean") {
                 next.allowChat = options.allowChat;
             }
@@ -565,8 +555,11 @@ io.on("connection", socket => {
                     next.accentColor = color;
                 }
             }
-            if (isOwner && options.editors !== undefined) {
-                next.editors = normalizeEditors(options.editors);
+            if (typeof options.roomName === "string") {
+                next.roomName = options.roomName.trim();
+            }
+            if (typeof options.description === "string") {
+                next.description = options.description.trim();
             }
         }
         roomData.roomOptions = next;

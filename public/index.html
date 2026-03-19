@@ -14,13 +14,12 @@
             <div class="brand">
                 <div class="logo">PL</div>
                 <div>
-                    <div class="title">Planetary</div>
-                    <div class="subtitle">A P2P transfer universe</div>
+                    <div class="title">Planetary Universe</div>
+                    <div class="subtitle">P2P transfer spaces for teams and classrooms</div>
                 </div>
             </div>
             <div class="header-actions">
-                <a id="universeLink" class="ghost-btn" href="universe.html" style="text-decoration: none;">Universe</a>
-                <a id="guestLobbyLink" class="ghost-btn" href="lobby.html?mode=join" style="text-decoration: none;">Lobby (gast)</a>
+                <a id="universeLink" class="ghost-btn" href="universe.html" style="text-decoration: none;">Open Universe</a>
                 <button id="logoutBtn" class="ghost-btn hidden" type="button">Logout</button>
                 <button class="account-btn" type="button" aria-label="Account">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -30,24 +29,52 @@
             </div>
         </header>
 
-        <section class="home-hero">
-            <div class="hero-copy">
-                <h1>Planets for P2P transfers, built for speed.</h1>
-                <p class="panel-sub">
-                    Leden beheren planeten en de universe‑weergave. Gasten kunnen planeten maken en betreden, maar niet aanpassen.
-                </p>
-                <div class="button-row">
-                    <a class="primary-btn" href="lobby.html?mode=join" style="text-decoration: none;">Enter planet</a>
-                    <a class="primary-btn blue-btn" href="lobby.html?mode=create" style="text-decoration: none;">Create planet</a>
-                    <a class="ghost-btn" href="universe.html" style="text-decoration: none;">Open Universe</a>
+        <section class="hero">
+            <div class="hero-grid">
+                <div class="hero-copy">
+                    <h1>Bring your crew into orbit and transfer files instantly.</h1>
+                    <p class="panel-sub">
+                        Planetary turns P2P transfers into rooms with live presence, chat, and planet controls.
+                        Everything now runs inside the universe view with smooth transitions and no page reloads.
+                    </p>
+                    <div class="button-row">
+                        <a class="primary-btn" href="universe.html" style="text-decoration: none;">Launch Universe</a>
+                    </div>
+                    <div class="hero-meta">Live presence • end‑to‑end P2P • host‑controlled access</div>
+                    <div id="memberUnlockNote" class="auth-note"></div>
                 </div>
-                <div class="home-meta">Max 4 deelnemers • live chat • rechtstreeks P2P</div>
-                <div id="memberUnlockNote" class="auth-note"></div>
+                <div class="hero-cards">
+                    <div class="stat-card">
+                        <div class="stat-title">Realtime</div>
+                        <div class="stat-value">Presence</div>
+                        <div class="stat-sub">See who is online before you enter.</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Transfers</div>
+                        <div class="stat-value">P2P‑only</div>
+                        <div class="stat-sub">Direct lanes with per‑transfer approval.</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Control</div>
+                        <div class="stat-value">Host</div>
+                        <div class="stat-sub">Decide who can send or chat.</div>
+                    </div>
+                </div>
             </div>
-            <div class="hero-badges">
-                <div class="badge">P2P-only</div>
-                <div class="badge">Planet ID + Orbit Code</div>
-                <div class="badge">Per transfer accept</div>
+        </section>
+
+        <section class="feature-grid">
+            <div class="feature-card">
+                <h3>Universe navigation</h3>
+                <p>Find public planets, connect instantly, and keep your saved routes in view.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Room transfer deck</h3>
+                <p>Join a planet and manage payloads without leaving the universe.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Team readiness</h3>
+                <p>Presence, permissions, and chat stay synced for every planet.</p>
             </div>
         </section>
 
@@ -55,12 +82,12 @@
             <div class="auth-copy">
                 <h2>Login of registreer</h2>
                 <p class="panel-sub">
-                    Gebruik je account voor Universe en het beheren van planeetinstellingen.
+                    Universe werkt het best met accounts voor toegang, hosts, en instellingen.
                 </p>
                 <ul class="auth-benefits">
                     <li>Universe toegang en planeetbeheer</li>
-                    <li>Planeetgeschiedenis en bewaarde instellingen</li>
-                    <li>Toekomstige cloud‑logs en teamplaneten</li>
+                    <li>Online presence en team‑routes</li>
+                    <li>Lokale logs en activiteitsoverzicht</li>
                 </ul>
             </div>
             <div class="auth-card">
@@ -120,7 +147,6 @@
   const registerBtn = document.getElementById('registerBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const universeLink = document.getElementById('universeLink');
-  const guestLobbyLink = document.getElementById('guestLobbyLink');
   const memberUnlockNote = document.getElementById('memberUnlockNote');
 
   function setStatus(msg, isError) {
@@ -148,10 +174,12 @@
       const data = await res.json();
       if (data && data.user) {
         if (logoutBtn) logoutBtn.classList.remove('hidden');
-        if (guestLobbyLink) guestLobbyLink.classList.add('hidden');
         setStatus(`Ingelogd als ${data.user.username}.`, false);
+        if (universeLink) {
+          universeLink.textContent = 'Enter Universe';
+        }
         if (memberUnlockNote) {
-          memberUnlockNote.textContent = 'Upgrade unlocked: Universe is beschikbaar.';
+          memberUnlockNote.textContent = 'Universe is klaar. Je kunt nu planeten openen en beheren.';
         }
       }
     } catch (e) {}

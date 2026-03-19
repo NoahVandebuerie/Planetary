@@ -1,12 +1,3 @@
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planetary Lobby</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="lobby-page">
 <div class="ambient"></div>
 <div id="arrivalOverlay" class="arrival-overlay hidden" aria-hidden="true">
     <div class="arrival-shell">
@@ -28,7 +19,7 @@
             <div id="connectionStatus" class="connection-pill offline">Out of orbit</div>
             <div class="room-code">Planet ID <button id="roomIdCopy" class="copy-pill" type="button">--</button></div>
             <div class="room-code">Orbit Code <button id="roomCodeCopy" class="copy-pill" type="button">--</button></div>
-            <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave orbit</button>
+            <button id="leaveRoomBtn" class="ghost-btn danger-btn" disabled>Leave</button>
         </div>
     </header>
 
@@ -74,25 +65,8 @@
                     <textarea id="roomDescriptionInput" rows="3" placeholder="Korte beschrijving van deze planeet"></textarea>
                 </div>
                 <div class="field-row">
-                    <label for="roomEditorsInput">Editors (optioneel)</label>
-                    <input id="roomEditorsInput" type="text" placeholder="Bijv. noah, sara">
-                </div>
-                <div class="field-row">
                     <label for="maxParticipantsRange">Max deelnemers (verplicht) <span id="maxParticipantsValue">4</span></label>
                     <input id="maxParticipantsRange" type="range" min="2" max="4" step="1" value="4">
-                </div>
-                <div class="field-row">
-                    <div class="field-label">Transfer‑mode (verplicht)</div>
-                    <div class="radio-group">
-                        <label class="radio-card">
-                            <input type="radio" name="transferMode" value="all" checked required>
-                            <span>Iedereen kan sturen</span>
-                        </label>
-                        <label class="radio-card">
-                            <input type="radio" name="transferMode" value="owner" required>
-                            <span>Alleen host kan sturen</span>
-                        </label>
-                    </div>
                 </div>
                 <div class="field-row">
                     <label class="toggle-row">
@@ -133,11 +107,12 @@
                     <div class="card hidden" id="roomSettingsCard">
                         <div class="card-title">Planet settings</div>
                         <div class="field-row">
-                            <label for="roomSettingsTransferMode">Transfer‑mode</label>
-                            <select id="roomSettingsTransferMode">
-                                <option value="all">Iedereen kan sturen</option>
-                                <option value="owner">Alleen host kan sturen</option>
-                            </select>
+                            <label for="roomSettingsName">Planet name</label>
+                            <input id="roomSettingsName" type="text" placeholder="Bijv. Team Sync">
+                        </div>
+                        <div class="field-row">
+                            <label for="roomSettingsDescription">Planet description</label>
+                            <textarea id="roomSettingsDescription" rows="3" placeholder="Korte beschrijving"></textarea>
                         </div>
                         <div class="field-row">
                             <label class="toggle-row">
@@ -148,10 +123,6 @@
                         <div class="field-row">
                             <label for="roomSettingsAccent">Planet accentkleur</label>
                             <input id="roomSettingsAccent" type="color" value="#3aa9ff">
-                        </div>
-                        <div class="field-row">
-                            <label for="roomSettingsEditors">Editors (optioneel)</label>
-                            <input id="roomSettingsEditors" type="text" placeholder="Bijv. noah, sara">
                         </div>
                         <div class="button-row">
                             <button id="roomSettingsSaveBtn" class="primary-btn blue-btn">Save settings</button>
@@ -201,7 +172,6 @@
                 </div>
             </div>
         </section>
-
         <section id="themePanel" class="panel theme-panel hidden">
             <div class="theme-header">
                 <span>Customize</span>
@@ -240,8 +210,3 @@
         </div>
     </main>
 </div>
-
-<script src="/socket.io/socket.io.js"></script>
-<script src="room.js"></script>
-</body>
-</html>

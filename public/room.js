@@ -1,64 +1,67 @@
 const socket = io();
 
-const lobbyPanel = document.getElementById("lobbyPanel");
-const roomPanel = document.getElementById("roomPanel");
-const usernameInput = document.getElementById("usernameInput");
-const roomIdInput = document.getElementById("roomIdInput");
-const roomCodeInput = document.getElementById("roomCodeInput");
-const roomNameInput = document.getElementById("roomNameInput");
-const roomDescriptionInput = document.getElementById("roomDescriptionInput");
-const maxParticipantsRange = document.getElementById("maxParticipantsRange");
-const maxParticipantsValue = document.getElementById("maxParticipantsValue");
-const transferModeRadios = document.querySelectorAll('input[name="transferMode"]');
-const allowChatToggle = document.getElementById("allowChatToggle");
-const roomAccentColor = document.getElementById("roomAccentColor");
-const roomEditorsInput = document.getElementById("roomEditorsInput");
-const lobbyModeToggle = document.getElementById("lobbyModeToggle");
-const joinFields = document.getElementById("joinFields");
-const createFields = document.getElementById("createFields");
-const createRoomBtn = document.getElementById("createRoomBtn");
-const joinRoomBtn = document.getElementById("joinRoomBtn");
-const lobbyStatus = document.getElementById("lobbyStatus");
-const roomIdSpan = document.getElementById("roomId");
-const roomCodeSpan = document.getElementById("roomCode");
-const roomIdCopyBtn = document.getElementById("roomIdCopy");
-const roomCodeCopyBtn = document.getElementById("roomCodeCopy");
-const connectionStatus = document.getElementById("connectionStatus");
-const themeToggleBtn = document.getElementById("themeToggleBtn");
-const themePanel = document.getElementById("themePanel");
-const themeCloseBtn = document.getElementById("themeCloseBtn");
-const themePrimary = document.getElementById("themePrimary");
-const themeCreate = document.getElementById("themeCreate");
-const themeAccent = document.getElementById("themeAccent");
-const themeBg = document.getElementById("themeBg");
-const themeFont = document.getElementById("themeFont");
-const themeSaveBtn = document.getElementById("themeSaveBtn");
-const themeResetBtn = document.getElementById("themeResetBtn");
-const leaveRoomBtn = document.getElementById("leaveRoomBtn");
-const participantsList = document.getElementById("participantsList");
-const targetsList = document.getElementById("targetsList");
-const incomingRequests = document.getElementById("incomingRequests");
-const transferQueue = document.getElementById("transferQueue");
-const activityLog = document.getElementById("activityLog");
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("fileInput");
+const roomRoot = window.__ROOM_ROOT__ || document;
+const byId = (id) => roomRoot.querySelector(`#${id}`);
+const qsa = (selector) => roomRoot.querySelectorAll(selector);
+
+const lobbyPanel = byId("lobbyPanel");
+const roomPanel = byId("roomPanel");
+const usernameInput = byId("usernameInput");
+const roomIdInput = byId("roomIdInput");
+const roomCodeInput = byId("roomCodeInput");
+const roomNameInput = byId("roomNameInput");
+const roomDescriptionInput = byId("roomDescriptionInput");
+const maxParticipantsRange = byId("maxParticipantsRange");
+const maxParticipantsValue = byId("maxParticipantsValue");
+const allowChatToggle = byId("allowChatToggle");
+const roomAccentColor = byId("roomAccentColor");
+const lobbyModeToggle = byId("lobbyModeToggle");
+const joinFields = byId("joinFields");
+const createFields = byId("createFields");
+const createRoomBtn = byId("createRoomBtn");
+const joinRoomBtn = byId("joinRoomBtn");
+const lobbyStatus = byId("lobbyStatus");
+const roomIdSpan = byId("roomId");
+const roomCodeSpan = byId("roomCode");
+const roomIdCopyBtn = byId("roomIdCopy");
+const roomCodeCopyBtn = byId("roomCodeCopy");
+const connectionStatus = byId("connectionStatus");
+const themeToggleBtn = byId("themeToggleBtn");
+const themePanel = byId("themePanel");
+const themeCloseBtn = byId("themeCloseBtn");
+const themePrimary = byId("themePrimary");
+const themeCreate = byId("themeCreate");
+const themeAccent = byId("themeAccent");
+const themeBg = byId("themeBg");
+const themeFont = byId("themeFont");
+const themeSaveBtn = byId("themeSaveBtn");
+const themeResetBtn = byId("themeResetBtn");
+const leaveRoomBtn = byId("leaveRoomBtn");
+const participantsList = byId("participantsList");
+const targetsList = byId("targetsList");
+const incomingRequests = byId("incomingRequests");
+const transferQueue = byId("transferQueue");
+const activityLog = byId("activityLog");
+const dropzone = byId("dropzone");
+const fileInput = byId("fileInput");
 const dropSubtitle = dropzone ? dropzone.querySelector(".drop-sub") : null;
-const chatMessages = document.getElementById("chatMessages");
-const chatInput = document.getElementById("chatInput");
-const sendChatBtn = document.getElementById("sendChatBtn");
-const roomSettingsCard = document.getElementById("roomSettingsCard");
-const roomSettingsTransferMode = document.getElementById("roomSettingsTransferMode");
-const roomSettingsAllowChat = document.getElementById("roomSettingsAllowChat");
-const roomSettingsAccent = document.getElementById("roomSettingsAccent");
-const roomSettingsEditors = document.getElementById("roomSettingsEditors");
-const roomSettingsSaveBtn = document.getElementById("roomSettingsSaveBtn");
-const guestLimitsNote = document.getElementById("guestLimitsNote");
-const journeyHeadline = document.getElementById("journeyHeadline");
-const journeySubline = document.getElementById("journeySubline");
-const journeySteps = document.getElementById("journeySteps");
-const peerReadiness = document.getElementById("peerReadiness");
-const arrivalOverlay = document.getElementById("arrivalOverlay");
-const arrivalPlanetName = document.getElementById("arrivalPlanetName");
+const chatMessages = byId("chatMessages");
+const chatInput = byId("chatInput");
+const sendChatBtn = byId("sendChatBtn");
+const roomSettingsCard = byId("roomSettingsCard");
+const roomSettingsAllowChat = byId("roomSettingsAllowChat");
+const roomSettingsAccent = byId("roomSettingsAccent");
+const roomSettingsName = byId("roomSettingsName");
+const roomSettingsDescription = byId("roomSettingsDescription");
+const roomSettingsEditors = null;
+const roomSettingsSaveBtn = byId("roomSettingsSaveBtn");
+const guestLimitsNote = byId("guestLimitsNote");
+const journeyHeadline = byId("journeyHeadline");
+const journeySubline = byId("journeySubline");
+const journeySteps = byId("journeySteps");
+const peerReadiness = byId("peerReadiness");
+const arrivalOverlay = byId("arrivalOverlay");
+const arrivalPlanetName = byId("arrivalPlanetName");
 const PILOT_NAME_STORAGE_KEY = "planetary:pilotName";
 const ARRIVAL_PLANET_KEY = "planetary:arrivalPlanet";
 
@@ -79,7 +82,6 @@ let currentRoomOptions = {
     roomName: "",
     description: "",
     maxParticipants: 4,
-    transferMode: "all",
     allowChat: true,
     accentColor: "",
     editors: []
@@ -93,13 +95,14 @@ const selectedTargets = new Set(["all"]);
 const pendingRequests = new Map(); // requestId -> { resolve, targetId }
 const transfers = new Map(); // transferId -> { file, targetIds, statusByTarget, element }
 
-const urlParams = new URLSearchParams(window.location.search);
-const roomIdFromUrl = urlParams.get("roomId");
-const roomCodeFromUrl = urlParams.get("code");
-const usernameFromUrl = urlParams.get("username");
-const planetNameFromUrl = urlParams.get("planet");
-const autoJoinFromUrl = urlParams.get("autoJoin") === "1";
-const sourceFromUrl = urlParams.get("source");
+const embedOptions = window.__ROOM_OPTS__ || {};
+const urlParams = new URLSearchParams(embedOptions.query || window.location.search);
+let roomIdFromUrl = embedOptions.roomId || urlParams.get("roomId");
+let roomCodeFromUrl = embedOptions.roomCode || urlParams.get("code");
+let usernameFromUrl = embedOptions.username || urlParams.get("username");
+let planetNameFromUrl = embedOptions.planet || urlParams.get("planet");
+let autoJoinFromUrl = embedOptions.autoJoin === true || urlParams.get("autoJoin") === "1";
+let sourceFromUrl = embedOptions.source || urlParams.get("source");
 let autoJoinAttempted = false;
 let lobbyBusy = false;
 
@@ -152,12 +155,14 @@ if (lobbyModeToggle) {
     });
 }
 
-const modeFromUrl = urlParams.get("mode");
+const modeFromUrl = embedOptions.mode || urlParams.get("mode");
 if (modeFromUrl) {
     setLobbyMode(modeFromUrl);
 } else {
     setLobbyMode("join");
 }
+
+applyEmbedOptions(embedOptions);
 
 if (sourceFromUrl === "universe") {
     let arrivalName = planetNameFromUrl || "";
@@ -221,14 +226,7 @@ function applyGuestModeUI(isGuest) {
         allowChatToggle.checked = false;
         allowChatToggle.disabled = true;
     }
-    if (roomEditorsInput) roomEditorsInput.disabled = true;
     if (roomAccentColor) roomAccentColor.disabled = true;
-    if (transferModeRadios) {
-        transferModeRadios.forEach(radio => {
-            if (radio.value === "all") radio.checked = true;
-            radio.disabled = true;
-        });
-    }
 }
 
 window.addEventListener("universe-room-select", event => {
@@ -405,24 +403,11 @@ function hideArrivalOverlay() {
     }, 260);
 }
 
-function normalizeEditors(value) {
-    if (!value) return [];
-    if (Array.isArray(value)) {
-        return value
-            .map(item => String(item).trim().toLowerCase())
-            .filter(Boolean);
-    }
-    return String(value)
-        .split(",")
-        .map(item => item.trim().toLowerCase())
-        .filter(Boolean);
-}
-
 function normalizeRoomOptions(options) {
     return {
         ...ROOM_DEFAULTS,
         ...(options && typeof options === "object" ? options : {}),
-        editors: normalizeEditors(options && options.editors ? options.editors : [])
+        editors: []
     };
 }
 
@@ -432,16 +417,10 @@ function isRoomOwner() {
 
 function canEditRoom() {
     if (!isRegistered) return false;
-    if (isRoomOwner()) return true;
-    const nameKey = (username || "").trim().toLowerCase();
-    if (!nameKey) return false;
-    return currentRoomOptions.editors.includes(nameKey);
+    return isRoomOwner();
 }
 
 function canSendFiles() {
-    if (currentRoomOptions.transferMode === "owner" && !isRoomOwner()) {
-        return false;
-    }
     return true;
 }
 
@@ -468,7 +447,7 @@ function updateTransferAvailability() {
     if (dropzone) dropzone.classList.toggle("disabled", !allowed);
     if (fileInput) fileInput.disabled = !allowed;
     if (dropSubtitle) {
-        dropSubtitle.textContent = allowed ? "of klik om te kiezen" : "Alleen de host kan versturen";
+        dropSubtitle.textContent = "of klik om te kiezen";
     }
 }
 
@@ -477,9 +456,6 @@ function updateRoomSettingsUI() {
     const canEdit = canEditRoom();
     roomSettingsCard.classList.toggle("hidden", !canEdit);
     if (roomSettingsSaveBtn) roomSettingsSaveBtn.disabled = !canEdit;
-    if (roomSettingsEditors) {
-        roomSettingsEditors.disabled = !isRoomOwner();
-    }
 }
 
 function applyRoomOptions(options, shouldLog) {
@@ -487,10 +463,10 @@ function applyRoomOptions(options, shouldLog) {
         ...currentRoomOptions,
         ...(options || {})
     });
-    if (roomSettingsTransferMode) roomSettingsTransferMode.value = currentRoomOptions.transferMode;
+    if (roomSettingsName) roomSettingsName.value = currentRoomOptions.roomName || "";
+    if (roomSettingsDescription) roomSettingsDescription.value = currentRoomOptions.description || "";
     if (roomSettingsAllowChat) roomSettingsAllowChat.checked = !!currentRoomOptions.allowChat;
     if (roomSettingsAccent) roomSettingsAccent.value = currentRoomOptions.accentColor || ROOM_DEFAULTS.accentColor;
-    if (roomSettingsEditors) roomSettingsEditors.value = currentRoomOptions.editors.join(", ");
     applyRoomAccent(currentRoomOptions.accentColor || ROOM_DEFAULTS.accentColor);
     updateChatAvailability();
     updateTransferAvailability();
@@ -554,11 +530,6 @@ function joinRoom(roomId, roomCode, isCreate, roomOptions, statusMessage) {
             setLobbyStatus("Kies het maximum aantal deelnemers.", true);
             return;
         }
-        const transferMode = getRadioValue(transferModeRadios);
-        if (!transferMode) {
-            setLobbyStatus("Kies een transfer‑mode.", true);
-            return;
-        }
         currentRoomId = generateRoomId();
         currentRoomCode = generateRoomCode();
         if (roomIdSpan) roomIdSpan.textContent = currentRoomId;
@@ -570,19 +541,15 @@ function joinRoom(roomId, roomCode, isCreate, roomOptions, statusMessage) {
                 roomName: roomNameInput ? roomNameInput.value.trim() : "",
                 description: roomDescriptionInput ? roomDescriptionInput.value.trim() : "",
                 maxParticipants: maxParticipantsRange ? parseInt(maxParticipantsRange.value, 10) : 4,
-                transferMode,
                 allowChat: allowChatToggle ? allowChatToggle.checked : true,
-                accentColor: roomAccentColor ? roomAccentColor.value : "",
-                editors: normalizeEditors(roomEditorsInput ? roomEditorsInput.value : "")
+                accentColor: roomAccentColor ? roomAccentColor.value : ""
             }
             : {
                 roomName: roomNameInput ? roomNameInput.value.trim() : "",
                 description: roomDescriptionInput ? roomDescriptionInput.value.trim() : "",
                 maxParticipants: GUEST_MAX_PARTICIPANTS,
-                transferMode: "all",
                 allowChat: false,
-                accentColor: "",
-                editors: []
+                accentColor: ""
             };
         joinRoom(currentRoomId, currentRoomCode, true, roomOptions, "Creating planet...");
     };
@@ -647,7 +614,6 @@ const ROOM_DEFAULTS = {
     roomName: "",
     description: "",
     maxParticipants: 4,
-    transferMode: "all",
     allowChat: true,
     accentColor: "#22d3a6",
     editors: []
@@ -816,13 +782,11 @@ if (roomSettingsSaveBtn) {
     roomSettingsSaveBtn.onclick = () => {
         if (!currentRoomId || !canEditRoom()) return;
         const nextOptions = {
-            transferMode: roomSettingsTransferMode ? roomSettingsTransferMode.value : "all",
+            roomName: roomSettingsName ? roomSettingsName.value.trim() : currentRoomOptions.roomName,
+            description: roomSettingsDescription ? roomSettingsDescription.value.trim() : currentRoomOptions.description,
             allowChat: roomSettingsAllowChat ? roomSettingsAllowChat.checked : true,
             accentColor: roomSettingsAccent ? roomSettingsAccent.value : ROOM_DEFAULTS.accentColor
         };
-        if (isRoomOwner() && roomSettingsEditors) {
-            nextOptions.editors = normalizeEditors(roomSettingsEditors.value);
-        }
         pendingRoomOptionsUpdate = true;
         applyRoomOptions(nextOptions, false);
         socket.emit("room-options-update", { room: currentRoomId, options: nextOptions });
@@ -858,12 +822,14 @@ socket.on("joined", ({ room, id }) => {
     if (roomCodeSpan) roomCodeSpan.textContent = currentRoomCode || "--";
     if (roomIdCopyBtn) roomIdCopyBtn.textContent = currentRoomId || "--";
     if (roomCodeCopyBtn) roomCodeCopyBtn.textContent = currentRoomCode || "--";
-    leaveRoomBtn.disabled = false;
+    if (leaveRoomBtn) {
+        leaveRoomBtn.disabled = false;
+    }
     setLobbyBusy(false);
     setConnectionStatus(true);
     document.body.classList.add("planet-live");
-    lobbyPanel.classList.add("hidden");
-    roomPanel.classList.remove("hidden");
+    if (lobbyPanel) lobbyPanel.classList.add("hidden");
+    if (roomPanel) roomPanel.classList.remove("hidden");
     setLobbyStatus("");
     logActivity(`Je bent in planeet ${currentRoomId}.`, "Welkom:");
     if (currentRoomId) {
@@ -871,7 +837,7 @@ socket.on("joined", ({ room, id }) => {
         history.replaceState(null, "", `?roomId=${currentRoomId}${codePart}`);
     }
     window.dispatchEvent(new CustomEvent("universe-room-joined", {
-        detail: { roomId: currentRoomId, roomCode: currentRoomCode }
+        detail: { roomId: currentRoomId, roomCode: currentRoomCode, isOwner: roomOwnerId === selfId }
     }));
     applyRoomOptions(joinedOptions || ROOM_DEFAULTS, false);
     renderPeerReadiness();
@@ -910,6 +876,9 @@ socket.on("room-owner", ({ ownerId }) => {
     if (roomOwnerId === selfId) {
         logActivity("Je bent nu de host.", "Info:");
     }
+    window.dispatchEvent(new CustomEvent("universe-room-owner", {
+        detail: { roomId: currentRoomId, isOwner: roomOwnerId === selfId }
+    }));
 });
 
 socket.on("room-users", users => {
@@ -1013,11 +982,60 @@ socket.on("chat-message", ({ from, name, text, time }) => {
     });
 });
 
-leaveRoomBtn.onclick = () => {
-    if (!currentRoomId) return;
-    socket.emit("leave-room", { room: currentRoomId });
-    cleanupRoomState();
-};
+if (leaveRoomBtn) {
+    leaveRoomBtn.onclick = () => {
+        if (!currentRoomId) return;
+        socket.emit("leave-room", { room: currentRoomId });
+        cleanupRoomState();
+    };
+}
+
+function applyEmbedOptions(options) {
+    if (!options || typeof options !== "object") return;
+
+    roomIdFromUrl = options.roomId || roomIdFromUrl;
+    roomCodeFromUrl = options.roomCode || roomCodeFromUrl;
+    usernameFromUrl = options.username || usernameFromUrl;
+    planetNameFromUrl = options.planet || planetNameFromUrl;
+    sourceFromUrl = options.source || sourceFromUrl;
+    autoJoinFromUrl = options.autoJoin === true;
+
+    if (usernameInput && usernameFromUrl) {
+        usernameInput.value = usernameFromUrl;
+    }
+    if (roomIdInput && roomIdFromUrl) {
+        roomIdInput.value = roomIdFromUrl;
+    }
+    if (roomCodeInput && roomCodeFromUrl) {
+        roomCodeInput.value = roomCodeFromUrl;
+    }
+
+    if (options.mode) {
+        setLobbyMode(options.mode);
+    }
+
+    if (options.autoCreate) {
+        const roomId = roomIdFromUrl || generateRoomId();
+        const roomCode = roomCodeFromUrl || generateRoomCode();
+        const roomOptions = options.roomOptions || {};
+        username = (currentUser && isRegistered)
+            ? currentUser.username
+            : (usernameFromUrl || (usernameInput ? usernameInput.value.trim() : "") || "Explorer");
+        currentRoomId = roomId;
+        currentRoomCode = roomCode;
+        if (roomIdSpan) roomIdSpan.textContent = roomId;
+        if (roomCodeSpan) roomCodeSpan.textContent = roomCode;
+        if (roomIdCopyBtn) roomIdCopyBtn.textContent = roomId;
+        if (roomCodeCopyBtn) roomCodeCopyBtn.textContent = roomCode;
+        joinRoom(roomId, roomCode, true, roomOptions, "Creating planet...");
+        return;
+    }
+
+    autoJoinAttempted = false;
+    if (autoJoinFromUrl) {
+        maybeAutoJoinFromUrl();
+    }
+}
 
 sendChatBtn.onclick = () => {
     sendChatMessage();
@@ -1043,6 +1061,18 @@ function renderParticipants(users) {
             <span class="name">${user.name}</span>
             <span class="tag ${readiness.tone}">${user.id === selfId ? "you" : readiness.text}</span>
         `;
+        if (user.id !== selfId) {
+            const addBtn = document.createElement("button");
+            addBtn.className = "participant-add";
+            addBtn.type = "button";
+            addBtn.textContent = "Add friend";
+            addBtn.onclick = () => {
+                window.dispatchEvent(new CustomEvent("planet-add-friend", {
+                    detail: { username: user.name }
+                }));
+            };
+            row.appendChild(addBtn);
+        }
         participantsList.appendChild(row);
     });
 }
@@ -1527,6 +1557,7 @@ function escapeHtml(value) {
 }
 
 function cleanupRoomState() {
+    const previousRoomId = currentRoomId;
     if (currentRoomId) {
         history.replaceState(null, "", window.location.pathname);
     }
@@ -1546,57 +1577,73 @@ function cleanupRoomState() {
     selectedTargets.add("all");
     pendingRequests.clear();
     transfers.clear();
-    participantsList.innerHTML = "";
-    targetsList.innerHTML = "";
-    incomingRequests.innerHTML = "";
-    transferQueue.innerHTML = "";
-    activityLog.innerHTML = "";
-    chatMessages.innerHTML = "";
+    if (participantsList) participantsList.innerHTML = "";
+    if (targetsList) targetsList.innerHTML = "";
+    if (incomingRequests) incomingRequests.innerHTML = "";
+    if (transferQueue) transferQueue.innerHTML = "";
+    if (activityLog) activityLog.innerHTML = "";
+    if (chatMessages) chatMessages.innerHTML = "";
     if (roomIdSpan) roomIdSpan.textContent = "--";
     if (roomCodeSpan) roomCodeSpan.textContent = "--";
     if (roomIdCopyBtn) roomIdCopyBtn.textContent = "--";
     if (roomCodeCopyBtn) roomCodeCopyBtn.textContent = "--";
-    leaveRoomBtn.disabled = true;
+    if (leaveRoomBtn) leaveRoomBtn.disabled = true;
     setLobbyBusy(false);
     document.body.classList.remove("planet-live");
-    roomPanel.classList.add("hidden");
-    lobbyPanel.classList.remove("hidden");
+    if (roomPanel) roomPanel.classList.add("hidden");
+    if (lobbyPanel) lobbyPanel.classList.remove("hidden");
     setLobbyStatus("Je hebt de orbit verlaten.", false);
     setConnectionStatus(false);
     applyRoomOptions(ROOM_DEFAULTS, false);
     setJourneyState("select", "Choose a payload", "Pick one or more pilots, then drop a file to launch it through a space lane.");
     renderPeerReadiness();
     hideArrivalOverlay();
+    window.dispatchEvent(new CustomEvent("universe-room-left", {
+        detail: { roomId: previousRoomId }
+    }));
 }
 
-dropzone.addEventListener("dragover", event => {
-    event.preventDefault();
-    if (!canSendFiles()) return;
-    dropzone.classList.add("dragover");
-});
-dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
-dropzone.addEventListener("drop", event => {
-    event.preventDefault();
-    dropzone.classList.remove("dragover");
-    if (!canSendFiles()) {
-        logActivity("Alleen de host kan bestanden versturen.", "Info:");
+if (dropzone) {
+    dropzone.addEventListener("dragover", event => {
+        event.preventDefault();
+        if (!canSendFiles()) return;
+        dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", event => {
+        event.preventDefault();
+        dropzone.classList.remove("dragover");
+        if (!canSendFiles()) {
+            logActivity("Alleen de host kan bestanden versturen.", "Info:");
+            return;
+        }
+        const files = Array.from(event.dataTransfer.files || []);
+        if (files.length > 0) {
+            setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
+        }
+        files.forEach(startTransfer);
+    });
+}
+if (fileInput) {
+    fileInput.addEventListener("change", event => {
+        if (!canSendFiles()) {
+            logActivity("Alleen de host kan bestanden versturen.", "Info:");
+            return;
+        }
+        const files = Array.from(event.target.files || []);
+        if (files.length > 0) {
+            setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
+        }
+        files.forEach(startTransfer);
+        fileInput.value = "";
+    });
+}
+
+window.roomEmbedStart = applyEmbedOptions;
+window.roomEmbedLeave = () => {
+    if (leaveRoomBtn && !leaveRoomBtn.disabled) {
+        leaveRoomBtn.click();
         return;
     }
-    const files = Array.from(event.dataTransfer.files || []);
-    if (files.length > 0) {
-        setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
-    }
-    files.forEach(startTransfer);
-});
-fileInput.addEventListener("change", event => {
-    if (!canSendFiles()) {
-        logActivity("Alleen de host kan bestanden versturen.", "Info:");
-        return;
-    }
-    const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-        setJourneyState("select", "Payload selected", `${files.length} payload${files.length === 1 ? "" : "s"} locked and ready for launch.`);
-    }
-    files.forEach(startTransfer);
-    fileInput.value = "";
-});
+    cleanupRoomState();
+};

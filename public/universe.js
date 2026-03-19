@@ -7,7 +7,7 @@ import * as THREE from "three";
 const socket = window.io({ autoConnect: false });
 const e = React.createElement;
 
-// State
+// === State ===
 let currentUser = { id: "", userId: "", username: "", email: "", role: "", experienceKey: "" };
 let contacts = [];
 let savedPlanets = [];
@@ -26,7 +26,11 @@ let directoryPlanets = [];
 let activityLogEntries = [];
 let accessConnection = { roomId: "", state: "disconnected", label: "Disconnected" };
 let pendingPlanetPasswordRoomId = "";
+let roomOwnership = new Map();
+let savedPlanetIds = [];
 const SETTINGS_STORAGE_KEY = "planetary-universe-settings";
+const SAVED_STORAGE_KEY = "planetary-saved-planets";
+const LEGACY_STARRED_STORAGE_KEY = "planetary-starred-planets";
 const THEME_PRESETS = {
     "neon-cyan": {
         accent: "#78c8ff",
@@ -51,6 +55,7 @@ const DEFAULT_UI_SETTINGS = {
     panelTheme: "neon-cyan",
     audioEnabled: true,
     autoRotate: true,
+    panelFocusScale: 1,
     panelColors: { ...THEME_PRESETS["neon-cyan"] }
 };
 let uiSettings = { ...DEFAULT_UI_SETTINGS };
@@ -103,6 +108,7 @@ async function bootstrapCurrentUser() {
         : (payload.messages && typeof payload.messages === "object" ? payload.messages : {});
     notifications = Array.isArray(collections.notifications || payload.notifications) ? (collections.notifications || payload.notifications) : [];
     activityLogEntries = [];
+    savedPlanetIds = loadSavedPlanetIds();
 }
 
 const PLANET_LAYOUT = [
@@ -325,6 +331,7 @@ function syncPlanetCommandUi() {
     const manageActionBtn = document.getElementById("manageSelectedPlanetBtn");
     const hostActionBtn = document.getElementById("hostSelectedPlanetBtn");
     const connectedToSelectedPlanet = isPlanetConnected(selectedPlanet?.roomId);
+    const isHost = selectedPlanet ? roomOwnership.get(selectedPlanet.roomId) === true : false;
 
     if (accessPanel) {
         if (accessConnection.state === "connected" && accessConnection.roomId) {
@@ -340,8 +347,8 @@ function syncPlanetCommandUi() {
     }
 
     if (manageActionBtn) {
-        manageActionBtn.classList.toggle("is-hidden", !connectedToSelectedPlanet);
-        manageActionBtn.disabled = !connectedToSelectedPlanet;
+        manageActionBtn.classList.toggle("is-hidden", !(connectedToSelectedPlanet && isHost));
+        manageActionBtn.disabled = !(connectedToSelectedPlanet && isHost);
     }
 
     if (hostActionBtn && selectedPlanet) {
@@ -441,12 +448,11 @@ function requestPlanetEntry(roomId, key = "") {
     });
 }
 
-// UI Functions
+// === UI Rendering ===
 function updatePilotName() {
     const el = document.getElementById("pilotName");
     if (!el) return;
-    const roleLabel = currentUser.role ? ` · ${currentUser.role}` : "";
-    el.textContent = `${currentUser.username}${roleLabel}`;
+    el.textContent = currentUser.username;
 
     const chip = document.getElementById("pilotUserIdChip");
     if (chip) {
@@ -471,6 +477,9 @@ function readUiSettings() {
         return {
             ...DEFAULT_UI_SETTINGS,
             ...stored,
+            panelFocusScale: Number.isFinite(Number(stored.panelFocusScale))
+                ? Number(stored.panelFocusScale)
+                : DEFAULT_UI_SETTINGS.panelFocusScale,
             panelColors: {
                 ...THEME_PRESETS[stored.panelTheme || DEFAULT_UI_SETTINGS.panelTheme],
                 ...(stored.panelColors || {})
@@ -485,6 +494,42 @@ function persistUiSettings() {
     try {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(uiSettings));
     } catch (_error) {}
+}
+
+function loadSavedPlanetIds() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) || "[]");
+        const legacy = JSON.parse(localStorage.getItem(LEGACY_STARRED_STORAGE_KEY) || "[]");
+        const combined = [
+            ...(Array.isArray(stored) ? stored : []),
+            ...(Array.isArray(legacy) ? legacy : [])
+        ];
+        return combined.map((id) => String(id || "").trim()).filter(Boolean);
+    } catch (_error) {
+        return [];
+    }
+}
+
+function persistSavedPlanets() {
+    try {
+        localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedPlanetIds));
+    } catch (_error) {}
+}
+
+function isPlanetSaved(roomId) {
+    return savedPlanetIds.includes(roomId);
+}
+
+function togglePlanetSaved(roomId) {
+    if (!roomId) return;
+    if (isPlanetSaved(roomId)) {
+        savedPlanetIds = savedPlanetIds.filter((id) => id !== roomId);
+    } else {
+        savedPlanetIds = [roomId, ...savedPlanetIds.filter((id) => id !== roomId)];
+    }
+    persistSavedPlanets();
+    updateSavedPlanets();
+    updatePlanetsList();
 }
 
 function normalizeHexColor(value, fallback) {
@@ -576,6 +621,41 @@ function applyPanelAppearance() {
     document.body.style.setProperty("--card-bg-hover", `linear-gradient(135deg, ${rgbaFromHex(accent, 0.18)}, ${rgbaFromHex(accentStrong, 0.08)})`);
     document.body.style.setProperty("--planet-card-bg", `linear-gradient(135deg, ${rgbaFromHex(cardSurfaceAlt, 0.5)}, ${rgbaFromHex(cardSurface, 0.78)})`);
     document.body.style.setProperty("--planet-card-hover", `linear-gradient(135deg, ${rgbaFromHex(accent, 0.2)}, ${rgbaFromHex(accentStrong, 0.08)})`);
+    applyPanelFocus();
+}
+
+const PANEL_FOCUS_MIN = 1;
+const PANEL_FOCUS_MAX = 1.6;
+const PANEL_FOCUS_EPSILON = 0.02;
+
+function normalizePanelFocusScale(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_UI_SETTINGS.panelFocusScale;
+    }
+    return Math.min(PANEL_FOCUS_MAX, Math.max(PANEL_FOCUS_MIN, parsed));
+}
+
+function applyPanelFocus() {
+    if (!document.body) return;
+
+    const scale = normalizePanelFocusScale(uiSettings.panelFocusScale);
+    const focusEnabled = scale > PANEL_FOCUS_MIN + PANEL_FOCUS_EPSILON;
+    const inactiveScale = Math.max(0.7, 1 - (scale - 1) * 0.6);
+
+    uiSettings.panelFocusScale = scale;
+    document.body.classList.toggle("panel-focus-enabled", focusEnabled);
+    document.body.style.setProperty("--panel-active-flex", scale.toFixed(2));
+    document.body.style.setProperty("--panel-inactive-flex", inactiveScale.toFixed(2));
+
+    if (!focusEnabled) {
+        document.querySelectorAll(".universe-panel.is-active-panel, .universe-panel.is-inactive-panel")
+            .forEach((panel) => panel.classList.remove("is-active-panel", "is-inactive-panel"));
+    }
+}
+
+function isPanelFocusEnabled() {
+    return normalizePanelFocusScale(uiSettings.panelFocusScale) > PANEL_FOCUS_MIN + PANEL_FOCUS_EPSILON;
 }
 
 function applyPanelTheme(themeName) {
@@ -590,6 +670,8 @@ function syncSettingsControls() {
     const themeSelect = document.getElementById("panelThemeSelect");
     const audioToggle = document.getElementById("audioToggle");
     const autoRotateToggle = document.getElementById("autoRotateToggle");
+    const panelFocusRange = document.getElementById("panelFocusRange");
+    const panelFocusValue = document.getElementById("panelFocusValue");
     const accentInput = document.getElementById("panelAccentColor");
     const surfaceInput = document.getElementById("panelSurfaceColor");
     const successInput = document.getElementById("panelSuccessColor");
@@ -603,6 +685,13 @@ function syncSettingsControls() {
     }
     if (autoRotateToggle) {
         autoRotateToggle.checked = !!uiSettings.autoRotate;
+    }
+    if (panelFocusRange) {
+        const scale = normalizePanelFocusScale(uiSettings.panelFocusScale);
+        panelFocusRange.value = scale.toFixed(2);
+        if (panelFocusValue) {
+            panelFocusValue.textContent = `${scale.toFixed(2)}x`;
+        }
     }
     if (accentInput) {
         accentInput.value = uiSettings.panelColors?.accent || getThemePreset(uiSettings.panelTheme).accent;
@@ -684,7 +773,6 @@ async function loadPersistedEventLog() {
             : [];
         updateLogPanel();
     } catch (_error) {
-        // Keep the existing log state if the backend fetch fails.
     }
 }
 
@@ -907,7 +995,7 @@ function updateFriendsList() {
     if (!list) return;
 
     list.innerHTML = contacts.map(contact => `
-        <div class="item friend-item" data-action="selectContact" data-action-arg="${contact.userId}">
+        <div class="item friend-item" data-action="openFriendMenu" data-action-arg="${contact.userId}">
             <div>
                 <div class="item-name">${contact.username}</div>
                 <div class="item-status">${contact.online ? "Online" : "Offline"} · ${contact.role}</div>
@@ -924,14 +1012,32 @@ function updateSavedPlanets() {
     const list = document.getElementById("savedPlanets");
     if (!list) return;
 
-    list.innerHTML = savedPlanets.map(planet => `
+    const starredEntries = savedPlanetIds
+        .map((roomId) => allPlanets.find((planet) => planet.roomId === roomId)
+            || savedPlanets.find((planet) => planet.roomId === roomId))
+        .filter(Boolean);
+    const ownedEntries = savedPlanets.filter((planet) => planet.ownerUserId === (currentUser.userId || currentUser.id));
+
+    if (starredEntries.length === 0 && ownedEntries.length === 0) {
+        list.innerHTML = "<div class='empty-state is-centered'>Star a planet or create one to pin it here.</div>";
+        return;
+    }
+
+    const renderPlanetItem = (planet) => `
         <div class="item saved-planet-item" data-action="quickConnectSavedPlanet" data-action-arg="${planet.roomId}" data-room-id="${planet.roomId}">
             <div>
                 <div class="item-name">${planet.roomName}</div>
-                <div class="item-status">${planet.users}/${planet.maxUsers} pilots ${planet.status === "nuking" ? "🔥" : "✓"}</div>
+                <div class="item-status">${planet.users}/${planet.maxUsers} 🚀</div>
             </div>
         </div>
-    `).join("");
+    `;
+
+    list.innerHTML = `
+        ${starredEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
+        ${starredEntries.map(planet => renderPlanetItem(planet)).join("")}
+        ${ownedEntries.length ? `<div class="navigation-group-title">🛠️ My Planets</div>` : ""}
+        ${ownedEntries.map(planet => renderPlanetItem(planet)).join("")}
+    `;
 }
 
 window.findPlanet = () => {
@@ -1003,11 +1109,15 @@ window.connectPlanetFromUniverse = (roomId) => {
     window.showPlanetDetails(roomId);
 };
 
+function generateRoomCode() {
+    const part = () => Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `${part()}${part()}`;
+}
+
 window.createPlanet = () => {
     const nameEl = document.getElementById("planetCreateName");
     const descEl = document.getElementById("planetCreateDescription");
     const maxEl = document.getElementById("planetCreateMax");
-    const modeEl = document.getElementById("planetCreateMode");
     const chatEl = document.getElementById("planetCreateChat");
     const accentEl = document.getElementById("planetCreateAccent");
 
@@ -1022,6 +1132,7 @@ window.createPlanet = () => {
     const roomId = `${slug || "planet"}-${suffix}`;
     const maxUsers = Math.max(2, Math.min(12, Number(maxEl ? maxEl.value : 4) || 4));
     const accentColor = accentEl && /^#[0-9a-fA-F]{6}$/.test(accentEl.value) ? accentEl.value : "#3aa9ff";
+    const roomCode = generateRoomCode();
 
     const planet = {
         roomId,
@@ -1034,14 +1145,14 @@ window.createPlanet = () => {
         nukeTimer: null,
         description: descEl ? descEl.value.trim() : "",
         status: "offline",
-        transferMode: modeEl ? modeEl.value : "all",
-        allowChat: chatEl ? !!chatEl.checked : true
+        allowChat: chatEl ? !!chatEl.checked : true,
+        roomCode
     };
 
     allPlanets = [planet, ...allPlanets.filter(p => p.roomId !== roomId)];
     if (!savedPlanets.find(p => p.roomId === roomId)) {
         savedPlanets = [
-            { roomId, roomName, ownerUserId: currentUser.userId || currentUser.id || "", users: 0, maxUsers, status: "offline" },
+            { roomId, roomName, ownerUserId: currentUser.userId || currentUser.id || "", users: 0, maxUsers, status: "offline", roomCode },
             ...savedPlanets
         ];
     }
@@ -1050,6 +1161,13 @@ window.createPlanet = () => {
     updateSavedPlanets();
     setPlanetCreateStatus("Planet aangemaakt. Selecteer om te beheren.", "success");
     addLogEntry("UNIVERSE", `Created ${roomName}`, "Planet command issued");
+    window.openRoomTransfer(roomId, roomCode, roomName, "create", {
+        roomName,
+        description: planet.description,
+        maxParticipants: maxUsers,
+        allowChat: planet.allowChat,
+        accentColor
+    });
 };
 
 function updatePlanetsList() {
@@ -1059,7 +1177,7 @@ function updatePlanetsList() {
     const publicPlanets = allPlanets.filter((planet) => !planet.isPrivate);
 
     if (publicPlanets.length === 0) {
-        list.innerHTML = "<div class='empty-state is-centered'>No public planets are available right now. Use Planet ID and password for private planets.</div>";
+        list.innerHTML = "<div class='empty-state is-centered'>No public planets are available right now. Use the Add Friend panel to connect by Planet ID.</div>";
         return;
     }
 
@@ -1067,15 +1185,17 @@ function updatePlanetsList() {
         const status = planet.status;
         const statusEmoji = status === "online" ? "🟢" : "⚪";
         const statusClass = status === "online" ? "is-online" : "is-offline";
+        const isStarred = isPlanetSaved(planet.roomId);
 
         return `
             <div class="planet-card" data-action="showPlanetDetails" data-action-arg="${planet.roomId}">
                 <div class="planet-card-header">
                     <div class="planet-name">${planet.roomName}</div>
+                    <button class="planet-star-btn ${isStarred ? "is-starred" : ""}" type="button" data-action="toggleSavedPlanet" data-action-arg="${planet.roomId}" title="${isStarred ? "Unsave planet" : "Save planet"}">${isStarred ? "⭐" : "☆"}</button>
                     <div class="planet-status ${statusClass}">${statusEmoji} ${status}</div>
                 </div>
                 <div class="planet-info">
-                    <div class="info-badge">${planet.users}/${planet.maxUsers} 👥</div>
+                    <div class="info-badge">${planet.users}/${planet.maxUsers} 🚀</div>
                     <div class="info-badge">🔓 Public</div>
                 </div>
             </div>
@@ -1090,13 +1210,11 @@ window.showPlanetDetails = (roomId) => {
     selectedPlanet = planet;
     requestPlanetCameraFocus(roomId);
 
-    // Keep access panel visible and swap the command panel into details mode
     const commandView = document.getElementById("planetCommandView");
     const detailsView = document.getElementById("planetDetailsView");
     hideElement(commandView);
     showElement(detailsView);
 
-    // Update planet details
     const title = document.getElementById("planetTitle");
     const stats = document.getElementById("planetStats");
     const desc = document.getElementById("planetDescription");
@@ -1140,7 +1258,6 @@ window.showPlanetDetails = (roomId) => {
         `;
     }
 
-    // Show key input if private
     if (keySection) {
         if (planet.isPrivate) {
             showElement(keySection);
@@ -1150,7 +1267,6 @@ window.showPlanetDetails = (roomId) => {
         if (keyInput) keyInput.value = "";
     }
 
-    // Check if full and show/hide enter button
     setPlanetEntryStatus("");
     setEnterPlanetBusy(false);
     const isFull = planet.users >= planet.maxUsers;
@@ -1189,13 +1305,37 @@ window.closePlanetDetails = () => {
 
 window.hostSelectedPlanet = () => {
     if (!selectedPlanet) return;
-    if (isPlanetConnected(selectedPlanet.roomId)) {
-        window.openRoomTransfer(selectedPlanet.roomId);
+    const planet = selectedPlanet;
+    const roomId = planet.roomId;
+    const existingCode = planet.roomCode;
+
+    if (planet.status === "online") {
+        if (existingCode) {
+            window.openRoomTransfer(roomId, existingCode, planet.roomName, "join");
+            return;
+        }
+        requestPlanetEntry(roomId).then((response) => {
+            if (response?.ok && response.room?.roomCode) {
+                planet.roomCode = response.room.roomCode;
+                window.openRoomTransfer(roomId, response.room.roomCode, planet.roomName, "join");
+                return;
+            }
+            setPlanetEntryStatus(response?.error || "Unable to open this planet right now.", "error");
+        }).catch(() => {
+            setPlanetEntryStatus("Unable to open this planet right now.", "error");
+        });
         return;
     }
-    const dialog = document.getElementById("planetSettingsDialog");
-    if (dialog) dialog.dataset.planetId = selectedPlanet.roomId;
-    window.hostPlanet();
+
+    const roomCode = generateRoomCode();
+    planet.roomCode = roomCode;
+    window.openRoomTransfer(roomId, roomCode, planet.roomName, "create", {
+        roomName: planet.roomName,
+        description: planet.description || "",
+        maxParticipants: planet.maxUsers,
+        allowChat: planet.allowChat !== false,
+        accentColor: planet.accentColor || "#3aa9ff"
+    });
 };
 
 window.openSelectedPlanetSettings = () => {
@@ -1252,6 +1392,7 @@ window.enterPlanet = async () => {
             return;
         }
 
+        const roomCode = response.room.roomCode;
         if (!savedPlanets.find((entry) => entry.roomId === planet.roomId)) {
             savedPlanets.push({
                 planetId: planet.planetId || planet.roomId,
@@ -1259,7 +1400,8 @@ window.enterPlanet = async () => {
                 roomName: response.room.roomName || planet.roomName,
                 users: planet.users + 1,
                 maxUsers: response.room.options?.maxParticipants || planet.maxUsers,
-                status: "online"
+                status: "online",
+                roomCode
             });
             updateSavedPlanets();
         }
@@ -1273,25 +1415,12 @@ window.enterPlanet = async () => {
         updateNotificationsList();
         addLogEntry("CONNECTED", `Entered ${response.room.roomName || planet.roomName}`, "Warp corridor opened");
 
-        const params = new URLSearchParams({
-            mode: "join",
-            roomId: response.room.roomId,
-            code: response.room.roomCode,
-            autoJoin: "1",
-            source: "universe",
-            planet: response.room.roomName || planet.roomName
-        });
-        if (currentUser.username) {
-            params.set("username", currentUser.username);
-        }
-
-        try {
-            window.sessionStorage.setItem("planetary:arrivalPlanet", response.room.roomName || planet.roomName);
-        } catch (_error) {
-            // Ignore storage issues and continue with the redirect.
-        }
-
-        window.location.href = `lobby.html?${params.toString()}`;
+        window.openRoomTransfer(
+            response.room.roomId,
+            roomCode,
+            response.room.roomName || planet.roomName,
+            "join"
+        );
     } catch (_error) {
         setPlanetEntryStatus("Connection failed. Please try again.", "error");
     } finally {
@@ -1316,7 +1445,6 @@ window.selectContact = (userId) => {
     }
     updateMessagesList();
 
-    // Clear unread
     const selectedContact = getContactById(userId);
     if (selectedContact) {
         selectedContact.unreadMessages = 0;
@@ -1330,7 +1458,93 @@ window.selectFriend = (username) => {
     window.selectContact(contact.userId);
 };
 
-// Find and Search Functions
+function removeFriendMenu() {
+    document.querySelectorAll(".friend-action-menu").forEach((menu) => menu.remove());
+}
+
+function getPlanetInviteOptions() {
+    const list = allPlanets.length ? allPlanets : savedPlanets;
+    return list.map((planet) => ({
+        roomId: planet.roomId,
+        label: `${planet.roomName} • ${planet.users}/${planet.maxUsers} ${planet.status === "online" ? "🟢" : "⚪"}`
+    }));
+}
+
+window.openFriendMenu = (userId, triggerEl) => {
+    const contact = getContactById(userId);
+    if (!contact) return;
+
+    removeFriendMenu();
+
+    const menu = document.createElement("div");
+    menu.className = "context-menu friend-action-menu";
+    menu.dataset.userId = userId;
+
+    const options = getPlanetInviteOptions();
+    const optionsMarkup = options.length
+        ? options.map((planet) => `<option value="${planet.roomId}">${planet.label}</option>`).join("")
+        : `<option value="">No planets available</option>`;
+
+    menu.innerHTML = `
+        <div class="friend-menu-title">${contact.username}</div>
+        <button class="friend-menu-btn" type="button" data-action="directMessageFriend" data-action-arg="${userId}">Direct message</button>
+        <div class="friend-menu-section">
+            <label class="friend-menu-label" for="invitePlanetSelect">Invite to planet</label>
+            <select class="friend-menu-select" id="invitePlanetSelect">
+                ${optionsMarkup}
+            </select>
+            <button class="friend-menu-btn" type="button" data-action="inviteFriendToPlanet" data-action-arg="${userId}" ${options.length ? "" : "disabled"}>Send invite</button>
+        </div>
+    `;
+
+    document.body.appendChild(menu);
+
+    const rect = triggerEl?.getBoundingClientRect?.();
+    if (rect) {
+        const left = Math.min(window.innerWidth - 260, rect.right + 10);
+        const top = Math.min(window.innerHeight - 180, rect.top);
+        menu.style.left = `${Math.max(12, left)}px`;
+        menu.style.top = `${Math.max(12, top)}px`;
+    }
+
+    const handleOutsideClick = (event) => {
+        if (menu.contains(event.target) || triggerEl?.contains?.(event.target)) {
+            return;
+        }
+        removeFriendMenu();
+        document.removeEventListener("click", handleOutsideClick, true);
+    };
+
+    document.addEventListener("click", handleOutsideClick, true);
+};
+
+window.directMessageFriend = (userId) => {
+    window.selectContact(userId);
+};
+
+window.inviteFriendToPlanet = (userId, actionElement) => {
+    const contact = getContactById(userId);
+    if (!contact) return;
+
+    const menu = actionElement?.closest?.(".friend-action-menu");
+    const select = menu?.querySelector(".friend-menu-select");
+    const roomId = select?.value;
+    if (!roomId) return;
+
+    const planet = allPlanets.find((entry) => entry.roomId === roomId) || savedPlanets.find((entry) => entry.roomId === roomId);
+    if (!planet) return;
+
+    addLogEntry("INVITE", `Invited ${contact.username}`, `Planet: ${planet.roomName}`);
+    notifications.unshift({
+        id: notifications.length + 1,
+        type: "invite",
+        message: `Invite sent to ${contact.username} for ${planet.roomName}`
+    });
+    updateNotificationBadge();
+    updateNotificationsList();
+};
+
+// === Discover / Friends ===
 function setFindStatus(message = "", tone = "") {
     const status = document.getElementById("findStatus");
     if (!status) return;
@@ -1362,6 +1576,24 @@ function addFriendToRoster(entry) {
     updateFriendsList();
     return true;
 }
+
+window.addFriendByUsername = (username) => {
+    const clean = String(username || "").trim();
+    if (!clean) return false;
+    const lookup = clean.toLowerCase();
+    const entry = directoryUsers.find((user) => String(user.username || "").toLowerCase() === lookup);
+    const fallback = {
+        userId: `usr_${lookup.replace(/[^a-z0-9]+/g, "_")}`,
+        username: clean,
+        role: "member",
+        online: true
+    };
+    const added = addFriendToRoster(entry || fallback);
+    if (added) {
+        addLogEntry("INVITE", `Added ${clean}`, "Friend link created");
+    }
+    return added;
+};
 
 function addPlanetToSaved(entry) {
     if (!entry) return false;
@@ -1466,7 +1698,7 @@ window.addPlanetByPlanetIdAction = (planetId) => {
     window.addPlanetByPlanetId();
 };
 
-// Settings Functions
+// === Settings ===
 window.openSettings = () => {
     if (activeUtilityPanel === "settings") {
         window.closeUtilityPanel();
@@ -1492,6 +1724,7 @@ window.saveSettings = () => {
     const themeSelect = document.getElementById("panelThemeSelect");
     const audioToggle = document.getElementById("audioToggle");
     const autoRotateToggle = document.getElementById("autoRotateToggle");
+    const panelFocusRange = document.getElementById("panelFocusRange");
     const accentInput = document.getElementById("panelAccentColor");
     const surfaceInput = document.getElementById("panelSurfaceColor");
     const successInput = document.getElementById("panelSuccessColor");
@@ -1503,6 +1736,7 @@ window.saveSettings = () => {
         panelTheme: themeSelect?.value || DEFAULT_UI_SETTINGS.panelTheme,
         audioEnabled: !!audioToggle?.checked,
         autoRotate: !!autoRotateToggle?.checked,
+        panelFocusScale: normalizePanelFocusScale(panelFocusRange?.value ?? uiSettings.panelFocusScale),
         panelColors: {
             accent: normalizeHexColor(accentInput?.value, preset.accent),
             surface: normalizeHexColor(surfaceInput?.value, preset.surface),
@@ -1551,7 +1785,7 @@ window.copyUserId = async () => {
     } catch (_error) {}
 };
 
-// Planet Settings Functions
+// === Planet Settings ===
 window.openPlanetSettings = (roomId) => {
     const planet = savedPlanets.find(p => p.roomId === roomId) || allPlanets.find(p => p.roomId === roomId);
     if (!planet) return;
@@ -1580,6 +1814,9 @@ window.hostPlanet = () => {
 
     if (planet) {
         planet.status = "online";
+        if (!planet.roomCode) {
+            planet.roomCode = generateRoomCode();
+        }
         const statusInfo = document.getElementById("planetStatusInfo");
         if (statusInfo) statusInfo.textContent = "Status: 🟢 Online";
         updatePlanetsList();
@@ -1588,9 +1825,14 @@ window.hostPlanet = () => {
             selectedPlanet = planet;
         }
 
-        // Open room transfer UI
         setTimeout(() => {
-            openRoomTransfer(roomId);
+            window.openRoomTransfer(roomId, planet.roomCode, planet.roomName, "create", {
+                roomName: planet.roomName,
+                description: planet.description || "",
+                maxParticipants: planet.maxUsers,
+                allowChat: planet.allowChat !== false,
+                accentColor: planet.accentColor || "#3aa9ff"
+            });
             closePlanetSettings();
         }, 300);
     }
@@ -1611,8 +1853,7 @@ window.offlinePlanet = () => {
             selectedPlanet = planet;
         }
         if (isPlanetConnected(roomId)) {
-            const modal = document.getElementById("roomTransferModal");
-            hideElement(modal);
+            window.closeRoomTransfer();
             disconnectPlanetSession(`Left ${planet.roomName}`, "Planet taken offline");
         } else {
             syncPlanetCommandUi();
@@ -1631,81 +1872,81 @@ window.deletePlanet = () => {
     }
 };
 
-// Room Transfer Functions
-window.openRoomTransfer = (roomId) => {
-    const planet = allPlanets.find(p => p.roomId === roomId);
-    if (!planet) return;
+// === Room Overlay ===
+let roomEmbedLoaded = false;
+let roomEmbedOpen = false;
 
-    const modal = document.getElementById("roomTransferModal");
-    if (modal) {
-        const title = document.getElementById("roomTitle");
-        const roomCode = document.getElementById("roomCodeDisplay");
-        const connectionStatus = document.getElementById("connectionStatus");
-        if (title) title.textContent = planet.roomName;
-        if (roomCode) roomCode.textContent = `Planet ID: ${roomId}`;
-        if (connectionStatus) connectionStatus.textContent = planet.status === "online" ? "Connected" : "Disconnected";
-
-        showElement(modal, "flex");
-        modal.dataset.roomId = roomId;
+async function ensureRoomEmbedLoaded() {
+    if (roomEmbedLoaded) return;
+    const root = document.getElementById("roomEmbedRoot");
+    if (!root) return;
+    const response = await fetch("room-embed.html");
+    root.innerHTML = await response.text();
+    window.__ROOM_ROOT__ = root;
+    window.__ROOM_EMBED__ = true;
+    if (!window.__roomEmbedModuleLoaded) {
+        await import("./room.js");
+        window.__roomEmbedModuleLoaded = true;
     }
+    roomEmbedLoaded = true;
+}
 
-    selectedPlanet = planet;
-    setAccessConnection(roomId, "connected", `Connected · ${planet.roomName}`);
-    syncPlanetCommandUi();
+async function openRoomOverlay(options) {
+    const modal = document.getElementById("roomTransferModal");
+    window.__ROOM_OPTS__ = options || {};
+    await ensureRoomEmbedLoaded();
+    if (window.roomEmbedStart) {
+        window.roomEmbedStart(window.__ROOM_OPTS__);
+    }
+    if (modal) {
+        showElement(modal, "flex");
+        modal.classList.add("is-open");
+        modal.classList.remove("is-closing");
+    }
+    document.body.classList.add("room-embed-active");
+    roomEmbedOpen = true;
+}
+
+window.openRoomTransfer = (roomId, roomCode, roomName, mode = "join", roomOptions = null) => {
+    if (!roomId) return;
+    openRoomOverlay({
+        roomId,
+        roomCode,
+        planet: roomName || "",
+        mode,
+        autoJoin: mode === "join",
+        autoCreate: mode === "create",
+        roomOptions: roomOptions || {},
+        username: currentUser.username || "",
+        source: "universe"
+    });
 };
 
 window.closeRoomTransfer = () => {
     const modal = document.getElementById("roomTransferModal");
-    hideElement(modal);
-    disconnectPlanetSession(selectedPlanet?.roomName ? `Left ${selectedPlanet.roomName}` : "", "Transfer room closed");
-};
-
-window.handleFileDrop = (event) => {
-    event.preventDefault();
-    const files = event.dataTransfer.files;
-    handleFiles(files);
-};
-
-window.handleFileSelect = (event) => {
-    const files = event.target.files;
-    handleFiles(files);
-};
-
-window.handleFiles = (files) => {
-    const transferQueue = document.getElementById("transferQueue");
-    if (transferQueue) {
-        let html = "";
-        for (let file of files) {
-            html += `<div class="transfer-file">
-                <div class="transfer-file-name">${file.name}</div>
-                <div class="transfer-file-size">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
-            </div>`;
-        }
-        transferQueue.innerHTML = html;
+    if (window.roomEmbedLeave) {
+        window.roomEmbedLeave();
     }
-};
-
-window.sendChatMessage = () => {
-    const input = document.getElementById("chatInput");
-    if (!input || !input.value.trim()) return;
-
-    const messages = document.getElementById("chatMessages");
-    if (messages) {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "message-bubble";
-        msgDiv.textContent = `You: ${input.value}`;
-        messages.appendChild(msgDiv);
-        messages.scrollTop = messages.scrollHeight;
+    if (modal) {
+        modal.classList.add("is-closing");
+        modal.classList.remove("is-open");
+        setTimeout(() => {
+            hideElement(modal);
+            modal.classList.remove("is-closing");
+        }, 240);
     }
-    input.value = "";
+    document.body.classList.remove("room-embed-active");
+    roomEmbedOpen = false;
 };
 
-// Context Menu and UI Helpers
+// === Planet Context Menu ===
 window.showPlanetContextMenu = (event, roomId) => {
     event.preventDefault();
     event.stopPropagation();
 
-    // Remove any existing context menu
+    const planet = savedPlanets.find(p => p.roomId === roomId) || allPlanets.find(p => p.roomId === roomId);
+    const isHost = roomOwnership.get(roomId) === true || (planet && planet.ownerUserId && planet.ownerUserId === currentUser.userId);
+
     const existing = document.querySelector(".context-menu");
     if (existing) existing.remove();
 
@@ -1713,20 +1954,36 @@ window.showPlanetContextMenu = (event, roomId) => {
     menu.className = "context-menu";
     menu.style.left = event.clientX + "px";
     menu.style.top = event.clientY + "px";
-    menu.innerHTML = `
-        <div class="context-menu-item" data-action="openPlanetSettings" data-action-arg="${roomId}">
-            ⚙️ Settings
-        </div>
-        <div class="context-menu-item" data-action="hostPlanetById" data-action-arg="${roomId}">
-            🟢 Host Planet
-        </div>
-        <div class="context-menu-item danger" data-action="deletePlanetById" data-action-arg="${roomId}">
-            🗑️ Delete
-        </div>
-    `;
+    if (isHost) {
+        menu.innerHTML = `
+            <div class="context-menu-item" data-action="customizePlanet" data-action-arg="${roomId}">
+                🎛️ Customize
+            </div>
+            <div class="context-menu-item" data-action="renamePlanet" data-action-arg="${roomId}">
+                ✏️ Rename
+            </div>
+            <div class="context-menu-item" data-action="setPlanetAccent" data-action-arg="${roomId}">
+                🎨 Accent Color
+            </div>
+            <div class="context-menu-item" data-action="setPlanetDescription" data-action-arg="${roomId}">
+                📝 Description
+            </div>
+            <div class="context-menu-item" data-action="hostPlanetById" data-action-arg="${roomId}">
+                🟢 Host Planet
+            </div>
+            <div class="context-menu-item danger" data-action="deletePlanetById" data-action-arg="${roomId}">
+                🗑️ Delete
+            </div>
+        `;
+    } else {
+        menu.innerHTML = `
+            <div class="context-menu-item" data-action="showPlanetDetails" data-action-arg="${roomId}">
+                🔭 View Planet
+            </div>
+        `;
+    }
     document.body.appendChild(menu);
 
-    // Remove menu when clicking elsewhere
     setTimeout(() => {
         document.addEventListener("click", function closeMenu() {
             menu.remove();
@@ -1765,34 +2022,90 @@ window.joinPlanet = (roomId) => {
         return;
     }
 
+    let key = "";
     if (planet.isPrivate) {
-        const key = prompt("This planet is private. Enter access key:");
+        key = prompt("This planet is private. Enter access key:") || "";
         if (!key) return;
     }
 
-    // Add to saved planets if not already there
-    if (!savedPlanets.find(p => p.roomId === roomId)) {
-        savedPlanets.push({
-            planetId: planet.planetId || roomId,
-            roomId: roomId,
-            roomName: planet.roomName,
-            users: planet.users + 1,
-            maxUsers: planet.maxUsers,
-            status: "active"
+    requestPlanetEntry(roomId, key).then((response) => {
+        if (!response?.ok || !response.room) {
+            alert(response?.error || "Unable to open this planet right now.");
+            return;
+        }
+        const roomCode = response.room.roomCode;
+        if (!savedPlanets.find(p => p.roomId === roomId)) {
+            savedPlanets.push({
+                planetId: planet.planetId || roomId,
+                roomId: roomId,
+                roomName: planet.roomName,
+                users: planet.users + 1,
+                maxUsers: planet.maxUsers,
+                status: "online",
+                roomCode
+            });
+            updateSavedPlanets();
+        }
+        notifications.unshift({
+            id: notifications.length + 1,
+            type: "joined",
+            message: `You entered ${planet.roomName}`
         });
-        updateSavedPlanets();
-    }
-
-    // Add notification
-    notifications.unshift({
-        id: notifications.length + 1,
-        type: "joined",
-        message: `You entered ${planet.roomName}`
+        updateNotificationBadge();
+        updateNotificationsList();
+        window.openRoomTransfer(roomId, roomCode, planet.roomName, "join");
     });
-    updateNotificationBadge();
-    updateNotificationsList();
+};
 
-    window.location.href = `lobby.html?mode=join&roomId=${roomId}`;
+function updatePlanetLocal(roomId, updater) {
+    let changed = false;
+    allPlanets = allPlanets.map((planet) => {
+        if (planet.roomId !== roomId) return planet;
+        changed = true;
+        return typeof updater === "function" ? updater(planet) : planet;
+    });
+    savedPlanets = savedPlanets.map((planet) => {
+        if (planet.roomId !== roomId) return planet;
+        return typeof updater === "function" ? updater(planet) : planet;
+    });
+    if (selectedPlanet && selectedPlanet.roomId === roomId) {
+        const updated = allPlanets.find((planet) => planet.roomId === roomId);
+        if (updated) selectedPlanet = updated;
+    }
+    if (changed) {
+        updatePlanetsList();
+        updateSavedPlanets();
+        if (selectedPlanet && selectedPlanet.roomId === roomId) {
+            window.showPlanetDetails(roomId);
+        }
+    }
+}
+
+window.customizePlanet = (roomId) => {
+    window.openPlanetSettings(roomId);
+};
+
+window.renamePlanet = (roomId) => {
+    const planet = allPlanets.find(p => p.roomId === roomId) || savedPlanets.find(p => p.roomId === roomId);
+    if (!planet) return;
+    const nextName = prompt("Planet name", planet.roomName || "")?.trim();
+    if (!nextName) return;
+    updatePlanetLocal(roomId, (p) => ({ ...p, roomName: nextName }));
+};
+
+window.setPlanetAccent = (roomId) => {
+    const planet = allPlanets.find(p => p.roomId === roomId) || savedPlanets.find(p => p.roomId === roomId);
+    if (!planet) return;
+    const nextColor = prompt("Accent color (hex)", planet.accentColor || "#3aa9ff")?.trim();
+    if (!nextColor || !/^#[0-9a-fA-F]{6}$/.test(nextColor)) return;
+    updatePlanetLocal(roomId, (p) => ({ ...p, accentColor: nextColor }));
+};
+
+window.setPlanetDescription = (roomId) => {
+    const planet = allPlanets.find(p => p.roomId === roomId) || savedPlanets.find(p => p.roomId === roomId);
+    if (!planet) return;
+    const nextDesc = prompt("Planet description", planet.description || "") ?? "";
+    updatePlanetLocal(roomId, (p) => ({ ...p, description: String(nextDesc).trim() }));
 };
 
 socket.on("rooms-summary", (summaries) => {
@@ -1866,11 +2179,30 @@ window.deletePlanetById = (roomId) => {
     window.deletePlanet();
 };
 
-// Message sending
+window.toggleSavedPlanet = (roomId) => {
+    togglePlanetSaved(roomId);
+};
+
+// === Messaging ===
 function wireUniverseUi() {
     uiSettings = readUiSettings();
     applyPanelAppearance();
     syncSettingsControls();
+
+    const panelColumns = document.querySelectorAll(".universe-column");
+    panelColumns.forEach((column) => {
+        const panels = Array.from(column.querySelectorAll(".universe-panel"));
+        panels.forEach((panel) => {
+            panel.addEventListener("mouseenter", () => setActivePanel(column, panel));
+            panel.addEventListener("focusin", () => setActivePanel(column, panel));
+        });
+        column.addEventListener("mouseleave", () => clearActivePanels(column));
+        column.addEventListener("focusout", (event) => {
+            if (!column.contains(event.relatedTarget)) {
+                clearActivePanels(column);
+            }
+        });
+    });
 
     const initializeUniverse = async () => {
         try {
@@ -1896,13 +2228,70 @@ function wireUniverseUi() {
 
     initializeUniverse();
 
+    window.addEventListener("planet-add-friend", (event) => {
+        const username = event?.detail?.username;
+        if (!username) return;
+        window.addFriendByUsername(username);
+    });
+
+    window.addEventListener("universe-room-joined", (event) => {
+        const roomId = event?.detail?.roomId;
+        const roomCode = event?.detail?.roomCode;
+        const isOwner = event?.detail?.isOwner === true;
+        if (!roomId) return;
+        roomOwnership.set(roomId, isOwner);
+        const planet = allPlanets.find(p => p.roomId === roomId) || savedPlanets.find(p => p.roomId === roomId);
+        if (planet) {
+            planet.status = "online";
+            if (roomCode) planet.roomCode = roomCode;
+            setAccessConnection(roomId, "connected", `Connected · ${planet.roomName || roomId}`);
+            updatePlanetsList();
+            updateSavedPlanets();
+        }
+        const modal = document.getElementById("roomTransferModal");
+        if (modal) {
+            modal.classList.add("is-open");
+            modal.classList.remove("is-closing");
+        }
+        roomEmbedOpen = true;
+    });
+
+    window.addEventListener("universe-room-owner", (event) => {
+        const roomId = event?.detail?.roomId;
+        if (!roomId) return;
+        roomOwnership.set(roomId, event?.detail?.isOwner === true);
+        syncPlanetCommandUi();
+    });
+
+    window.addEventListener("universe-room-left", (event) => {
+        const roomId = event?.detail?.roomId;
+        if (roomId) {
+            roomOwnership.delete(roomId);
+            setAccessConnection("", "disconnected", "Disconnected");
+            syncPlanetCommandUi();
+        }
+        if (roomEmbedOpen) {
+            const modal = document.getElementById("roomTransferModal");
+            if (modal) {
+                modal.classList.add("is-closing");
+                modal.classList.remove("is-open");
+                setTimeout(() => {
+                    hideElement(modal);
+                    modal.classList.remove("is-closing");
+                }, 240);
+            }
+            document.body.classList.remove("room-embed-active");
+            roomEmbedOpen = false;
+        }
+    });
+
     document.addEventListener("click", (event) => {
         const actionElement = event.target.closest("[data-action]");
         if (!actionElement) return;
 
         const action = window[actionElement.dataset.action];
         if (typeof action === "function") {
-            action(actionElement.dataset.actionArg);
+            action(actionElement.dataset.actionArg, actionElement);
         }
 
         const menu = actionElement.closest(".context-menu");
@@ -1920,17 +2309,6 @@ function wireUniverseUi() {
         });
     });
 
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    if (dropzone && fileInput) {
-        dropzone.addEventListener("click", () => fileInput.click());
-        dropzone.addEventListener("drop", window.handleFileDrop);
-        dropzone.addEventListener("dragover", (event) => event.preventDefault());
-        dropzone.addEventListener("dragleave", (event) => event.preventDefault());
-    }
-
-    fileInput?.addEventListener("change", window.handleFileSelect);
-
     document.getElementById("panelThemeSelect")?.addEventListener("change", (event) => {
         const nextTheme = event.target.value;
         uiSettings = {
@@ -1942,6 +2320,19 @@ function wireUniverseUi() {
         };
         syncSettingsControls();
         applyPanelAppearance();
+    });
+
+    document.getElementById("panelFocusRange")?.addEventListener("input", (event) => {
+        const scale = normalizePanelFocusScale(event.target.value);
+        uiSettings = {
+            ...uiSettings,
+            panelFocusScale: scale
+        };
+        applyPanelFocus();
+        const panelFocusValue = document.getElementById("panelFocusValue");
+        if (panelFocusValue) {
+            panelFocusValue.textContent = `${scale.toFixed(2)}x`;
+        }
     });
 
     [
@@ -1987,7 +2378,7 @@ function wireUniverseUi() {
         }
     });
 
-    // Nuke timer updates
+    // === Timers ===
     setInterval(() => {
         allPlanets = allPlanets.map(p => ({
             ...p,
@@ -2004,13 +2395,36 @@ function wireUniverseUi() {
     }, 1000);
 }
 
+function setActivePanel(column, activePanel) {
+    if (!isPanelFocusEnabled()) {
+        return;
+    }
+    const panels = Array.from(column.querySelectorAll(".universe-panel"));
+    panels.forEach((panel) => {
+        if (panel === activePanel) {
+            panel.classList.add("is-active-panel");
+            panel.classList.remove("is-inactive-panel");
+        } else {
+            panel.classList.remove("is-active-panel");
+            panel.classList.add("is-inactive-panel");
+        }
+    });
+}
+
+function clearActivePanels(column) {
+    const panels = Array.from(column.querySelectorAll(".universe-panel"));
+    panels.forEach((panel) => {
+        panel.classList.remove("is-active-panel", "is-inactive-panel");
+    });
+}
+
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", wireUniverseUi, { once: true });
 } else {
     wireUniverseUi();
 }
 
-// 3D Scene Components
+// === 3D Scene ===
 function NebulaClouds() {
     const cloudRef = useRef(null);
 
@@ -2182,7 +2596,7 @@ function Planet({ index = 0, size = 3, color = "#3aa9ff", roomId }) {
         hovered ? e(Html, { position: [0, 2.1, 0], center: true, distanceFactor: 16, transform: true, sprite: true, zIndexRange: [120, 0] },
             e("div", { className: "planet-tooltip" },
                 e("div", { className: "planet-tooltip-title" }, planet.roomName || planet.roomId),
-                e("div", { className: "planet-tooltip-meta" }, `${planet.status || "offline"} • ${planet.users || 0}/${planet.maxUsers || 0} pilots`),
+                e("div", { className: "planet-tooltip-meta" }, `${planet.status || "offline"} • ${planet.users || 0}/${planet.maxUsers || 0} 🚀`),
                 e("div", { className: "planet-tooltip-meta" }, planet.isPrivate ? "🔒 Private" : "🔓 Public")
             )
         ) : null
@@ -2281,7 +2695,6 @@ function UniverseScene() {
         e(NebulaClouds),
         e(CustomStars),
 
-        // Planets in the shared universe layout
         allPlanets.slice(0, 8).map((planet, i) => {
             const hues = [0.55, 0.6, 0.65, 0.58, 0.62, 0.57, 0.63, 0.59];
             const color = planet.accentColor || `hsl(${hues[i] * 360}, 85%, 55%)`;
