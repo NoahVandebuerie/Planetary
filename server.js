@@ -8,6 +8,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const AUTH_BACKEND_URL = process.env.AUTH_BACKEND_URL || "http://127.0.0.1:8000";
+const APP_ENV = (process.env.PLANETARY_ENV || process.env.NODE_ENV || "development").trim().toLowerCase();
+const SMTP_HOST = (process.env.SMTP_HOST || "").trim();
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_SECURE = ["1", "true", "yes", "on"].includes(String(process.env.SMTP_SECURE || "").trim().toLowerCase());
+const SMTP_USER = (process.env.SMTP_USER || "").trim();
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_FROM = (process.env.SMTP_FROM || "noreply@peertransfer.com").trim();
+const SMTP_USE_TEST_ACCOUNT = ["1", "true", "yes", "on"].includes(
+    String(process.env.SMTP_USE_TEST_ACCOUNT || (APP_ENV === "production" ? "false" : "true")).trim().toLowerCase()
+);
 
 app.use(express.json());
 
@@ -21,6 +31,7 @@ const MAX_ROOM_HISTORY = 40;
 
 let transporter = null;
 let transporterReady = false;
+let emailTransportMode = "disabled";
 
 const ALLOWED_TTL_HOURS = new Set([1, 12, 24]);
 
@@ -109,6 +120,56 @@ app.get("/api/me", (req, res) => proxyAuthRequest(req, res, "/api/me"));
 app.get("/api/demo/bootstrap", (req, res) => proxyAuthRequest(req, res, "/api/demo/bootstrap"));
 app.get("/api/event-log", (req, res) => proxyAuthRequest(req, res, `/api/event-log${req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""}`));
 app.post("/api/event-log", (req, res) => proxyAuthRequest(req, res, "/api/event-log"));
+app.get("/health", async (_req, res) => {
+    try {
+        const authHealthResponse = await fetch(`${AUTH_BACKEND_URL}/health`, {
+            signal: AbortSignal.timeout(3000)
+        });
+        let authHealth = null;
+        try {
+            authHealth = await authHealthResponse.json();
+        } catch (_error) {
+            authHealth = null;
+        }
+
+        const authOk = authHealthResponse.ok && !!authHealth?.ok;
+        const payload = {
+            ok: authOk,
+            service: "planetary-node",
+            environment: APP_ENV,
+            authBackendUrl: AUTH_BACKEND_URL,
+            authBackend: authOk ? authHealth : {
+                ok: false,
+                status: authHealthResponse.status
+            },
+            email: {
+                ready: transporterReady,
+                mode: emailTransportMode
+            },
+            realtime: {
+                rooms: Object.keys(rooms).length,
+                onlineUsers: onlineUsers.size
+            }
+        };
+
+        res.status(authOk ? 200 : 503).json(payload);
+    } catch (error) {
+        res.status(503).json({
+            ok: false,
+            service: "planetary-node",
+            environment: APP_ENV,
+            authBackendUrl: AUTH_BACKEND_URL,
+            authBackend: {
+                ok: false,
+                error: error.message
+            },
+            email: {
+                ready: transporterReady,
+                mode: emailTransportMode
+            }
+        });
+    }
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 function buildRoomsSummary() {
@@ -157,13 +218,23 @@ function normalizeEditors(value) {
         .filter(Boolean);
 }
 
+function normalizeUniverseStatus(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return ["online", "busy", "offline"].includes(normalized) ? normalized : "online";
+}
+
 function emitUniverseUsers() {
     const seen = new Set();
     const list = [];
     onlineUsers.forEach(entry => {
         if (seen.has(entry.username)) return;
         seen.add(entry.username);
-        list.push({ id: entry.id, username: entry.username });
+        list.push({
+            id: entry.id,
+            userId: entry.userId || entry.id,
+            username: entry.username,
+            status: normalizeUniverseStatus(entry.status)
+        });
     });
     io.to("universe").emit("universe-users", list);
 }
@@ -190,11 +261,35 @@ function recordRoomDeletion(roomId, room, reason) {
     emitRoomHistory();
 }
 
-nodemailer.createTestAccount((err, account) => {
-    if (err) {
-        console.error("Fout bij aanmaken testaccount:", err);
+async function initializeEmailTransport() {
+    if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+        transporter = nodemailer.createTransport({
+            host: SMTP_HOST,
+            port: SMTP_PORT,
+            secure: SMTP_SECURE,
+            auth: { user: SMTP_USER, pass: SMTP_PASS }
+        });
+        emailTransportMode = "smtp";
+        try {
+            await transporter.verify();
+            transporterReady = true;
+            console.log(`SMTP transport ready (${SMTP_HOST}:${SMTP_PORT})`);
+        } catch (error) {
+            transporterReady = false;
+            console.error("SMTP verify failed:", error.message);
+        }
+        return;
+    }
+
+    if (!SMTP_USE_TEST_ACCOUNT) {
         transporterReady = false;
-    } else {
+        emailTransportMode = "disabled";
+        console.warn("Email transport disabled. Configure SMTP_HOST/SMTP_USER/SMTP_PASS to enable invite emails.");
+        return;
+    }
+
+    try {
+        const account = await nodemailer.createTestAccount();
         transporter = nodemailer.createTransport({
             host: account.smtp.host,
             port: account.smtp.port,
@@ -202,16 +297,21 @@ nodemailer.createTestAccount((err, account) => {
             auth: { user: account.user, pass: account.pass }
         });
         transporterReady = true;
-        console.log("E‑mail testaccount klaar. Preview URL wordt getoond bij verzenden.");
+        emailTransportMode = "test";
+        console.log("E-mail testaccount klaar. Preview URL wordt getoond bij verzenden.");
+    } catch (error) {
+        transporterReady = false;
+        emailTransportMode = "disabled";
+        console.error("Fout bij aanmaken testaccount:", error.message);
     }
-});
+}
 
 async function sendEmail({ to, subject, text, html, replyTo }) {
     if (!transporter || !transporterReady) {
         throw new Error("Email service niet beschikbaar");
     }
     const info = await transporter.sendMail({
-        from: '"P2P Transfer" <noreply@peertransfer.com>',
+        from: `"Planetary" <${SMTP_FROM}>`,
         to,
         subject,
         text,
@@ -219,7 +319,9 @@ async function sendEmail({ to, subject, text, html, replyTo }) {
         replyTo
     });
     console.log("E‑mail verzonden:", info.messageId);
-    console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
+    if (emailTransportMode === "test") {
+        console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
+    }
     return info;
 }
 
@@ -276,8 +378,10 @@ io.on("connection", socket => {
     if (socket.user) {
         onlineUsers.set(socket.id, {
             id: socket.user.id,
+            userId: socket.user.userId || socket.user.id,
             username: socket.user.username,
-            socketId: socket.id
+            socketId: socket.id,
+            status: "online"
         });
         socket.join("universe");
         emitUniverseUsers();
@@ -295,6 +399,18 @@ io.on("connection", socket => {
 
     socket.on("universe-users", () => {
         if (!socket.user) return;
+        emitUniverseUsers();
+    });
+
+    socket.on("set-user-status", ({ status }) => {
+        if (!socket.user) return;
+        const entry = onlineUsers.get(socket.id);
+        if (!entry) return;
+
+        onlineUsers.set(socket.id, {
+            ...entry,
+            status: normalizeUniverseStatus(status)
+        });
         emitUniverseUsers();
     });
 
@@ -648,4 +764,9 @@ setInterval(() => {
 }, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server draait op poort ${PORT}`));
+initializeEmailTransport().then(() => {
+    server.listen(PORT, () => console.log(`Server draait op poort ${PORT}`));
+}).catch((error) => {
+    console.error("Fatal startup error:", error);
+    process.exit(1);
+});

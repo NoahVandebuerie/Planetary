@@ -19,6 +19,20 @@ SESSION_COOKIE_NAME = "p2p_session"
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
 DEFAULT_ROLE = "member"
 DEFAULT_EXPERIENCE_KEY = "explorer"
+APP_ENV = os.getenv("PLANETARY_ENV", "development").strip().lower()
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SESSION_COOKIE_SECURE = env_flag("PLANETARY_COOKIE_SECURE", APP_ENV == "production")
+SESSION_COOKIE_SAMESITE = os.getenv("PLANETARY_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
+if SESSION_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    SESSION_COOKIE_SAMESITE = "lax"
 
 
 class RegisterPayload(BaseModel):
@@ -145,7 +159,8 @@ def set_session_cookie(response: Response, token: str) -> None:
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+        samesite=SESSION_COOKIE_SAMESITE,
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
@@ -155,7 +170,8 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
         httponly=True,
-        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+        samesite=SESSION_COOKIE_SAMESITE,
         path="/",
     )
 
@@ -511,7 +527,17 @@ app = FastAPI(title="Planetary Auth Backend", lifespan=lifespan)
 
 @app.get("/health")
 def healthcheck() -> dict:
-    return {"ok": True}
+    return {
+        "ok": True,
+        "service": "auth-backend",
+        "environment": APP_ENV,
+        "databasePath": str(DATABASE_PATH),
+        "cookie": {
+            "name": SESSION_COOKIE_NAME,
+            "secure": SESSION_COOKIE_SECURE,
+            "sameSite": SESSION_COOKIE_SAMESITE,
+        },
+    }
 
 
 @app.post("/api/register")
