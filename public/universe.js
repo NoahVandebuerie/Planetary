@@ -1033,10 +1033,10 @@ function updateSavedPlanets() {
     `;
 
     list.innerHTML = `
-        ${starredEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
-        ${starredEntries.map(planet => renderPlanetItem(planet)).join("")}
         ${ownedEntries.length ? `<div class="navigation-group-title">🛠️ My Planets</div>` : ""}
         ${ownedEntries.map(planet => renderPlanetItem(planet)).join("")}
+        ${starredEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
+        ${starredEntries.map(planet => renderPlanetItem(planet)).join("")}
     `;
 }
 
