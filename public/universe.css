@@ -316,6 +316,7 @@ canvas {
 .topbar-add-btn:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
+    color: #e7fff5;
     box-shadow:
         inset 0 0 0 1px rgba(var(--success-rgb), 0.16),
         0 14px 28px rgba(var(--success-rgb), 0.22);
@@ -328,6 +329,13 @@ canvas {
         inset 0 0 0 1px rgba(var(--success-rgb), 0.2),
         0 16px 30px rgba(var(--success-rgb), 0.28);
     color: #effff8;
+}
+
+.topbar-add-btn:hover,
+.topbar-add-btn.is-active {
+    box-shadow:
+        inset 0 0 0 1px rgba(var(--success-rgb), 0.2),
+        0 14px 28px rgba(var(--success-rgb), 0.28);
 }
 
 .topbar-add-icon {
@@ -1067,12 +1075,16 @@ body.room-embed-active .topbar {
 }
 
 .navigation-group-title {
-    font-family: var(--font-support);
-    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: 0.95rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    color: var(--accent);
     margin: 10px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .planet-status {
