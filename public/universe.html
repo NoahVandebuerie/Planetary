@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planetary Universe — refined buttons</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="universe.css">
+    <link rel="stylesheet" href="style/main.css">
+    <link rel="stylesheet" href="style/universe.css">
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.9.0/dist/es-module-shims.js"></script>
-    <script type="importmap-shim" src="universe.importmap.json"></script>
+    <script type="importmap-shim" src="requirements.json"></script>
 </head>
 <body>
     <div id="universeRoot"></div>
 
     <div class="universe-ui">
         <div class="topbar">
-            <div class="pilot-identity">
-                <div class="pilot-name" id="pilotName">Commander</div>
-                    <button class="pilot-id-chip" id="pilotUserIdChip" type="button" data-action="copyUserId" title="Copy user ID">#usr_commander</button>
+            <div class="user-identity">
+                <div class="user-name" id="userName">Commander</div>
+                    <button class="user-id-chip" id="userIdChip" type="button" data-action="copyUserId" title="Copy user ID">#usr_commander</button>
             </div>
             <div class="status-badge">
                 <div class="status-dot"></div>
@@ -114,8 +114,8 @@
 
                     <div id="settingsToolView" class="utility-view is-hidden">
                         <div class="field-group">
-                            <label class="field-label" for="pilotNameInput">Pilot Name (account)</label>
-                            <input type="text" id="pilotNameInput" class="modal-input is-inline" placeholder="Managed by your account" readonly>
+                            <label class="field-label" for="userNameInput">Account Name</label>
+                            <input type="text" id="userNameInput" class="modal-input is-inline" placeholder="Managed by your account" readonly>
                         </div>
 
                         <div class="field-group">
@@ -318,6 +318,6 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script type="module-shim" src="universe.js"></script>
+    <script type="module-shim" src="js/universe.js"></script>
 </body>
 </html>

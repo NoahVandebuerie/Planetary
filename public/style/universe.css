@@ -154,7 +154,7 @@ canvas {
     opacity: 0.52;
 }
 
-.pilot-identity {
+.user-identity {
     position: relative;
     z-index: 1;
     display: flex;
@@ -162,7 +162,7 @@ canvas {
     gap: 10px;
 }
 
-.pilot-name {
+.user-name {
     position: relative;
     z-index: 1;
     font-weight: 700;
@@ -170,7 +170,7 @@ canvas {
     font-size: 1rem;
 }
 
-.pilot-id-chip {
+.user-id-chip {
     padding: 6px 10px;
     border-radius: 999px;
     background: var(--accent-soft);
@@ -181,7 +181,7 @@ canvas {
     letter-spacing: 0.04em;
 }
 
-.pilot-id-chip:hover {
+.user-id-chip:hover {
     background: rgba(var(--accent-rgb), 0.22);
     border-color: var(--panel-edge-strong);
 }
