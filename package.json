@@ -4,7 +4,8 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.cjs",
+    "test:smoke": "node --test tests/smoke.test.cjs",
     "start": "node server.js",
     "start:backend": "python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000",
     "seed:demo": "python -m backend.seed_demo"

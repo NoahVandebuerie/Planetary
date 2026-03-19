@@ -8,10 +8,9 @@ import {
 } from "./universe.scene.js";
 
 const socket = window.io({ autoConnect: false });
-const e = React.createElement;
 
 // === State ===
-let currentUser = { id: "", userId: "", username: "", email: "", role: "", experienceKey: "" };
+let currentUser = { id: "", userId: "", username: "", email: "", role: "", experienceKey: "", status: "online" };
 let contacts = [];
 let savedPlanets = [];
 let allPlanets = [];
@@ -32,6 +31,7 @@ let savedPlanetIds = [];
 const SETTINGS_STORAGE_KEY = "planetary-universe-settings";
 const SAVED_STORAGE_KEY = "planetary-saved-planets";
 const LEGACY_STARRED_STORAGE_KEY = "planetary-starred-planets";
+const USER_STATUS_STORAGE_KEY = "planetary-universe-user-status";
 const THEME_PRESETS = {
     "neon-cyan": {
         accent: "#78c8ff",
@@ -79,7 +79,8 @@ async function bootstrapCurrentUser() {
         id: payload.user.id,
         userId: payload.user.userId || payload.user.id,
         username: payload.user.username,
-        email: payload.user.email
+        email: payload.user.email,
+        status: readStoredUserStatus()
     };
     if (payload.user.role) {
         currentUser.role = payload.user.role;
@@ -110,6 +111,24 @@ async function bootstrapCurrentUser() {
     notifications = Array.isArray(collections.notifications || payload.notifications) ? (collections.notifications || payload.notifications) : [];
     activityLogEntries = [];
     savedPlanetIds = loadSavedPlanetIds();
+
+    contacts = contacts.map((contact) => {
+        const status = normalizeUserStatus(contact.status || (contact.online ? "online" : "offline"));
+        return {
+            ...contact,
+            status,
+            online: status === "online"
+        };
+    });
+
+    directoryUsers = directoryUsers.map((user) => {
+        const status = normalizeUserStatus(user.status || (user.online ? "online" : "offline"));
+        return {
+            ...user,
+            status,
+            online: status === "online"
+        };
+    });
 }
 
 
@@ -384,6 +403,135 @@ function formatUserId(userId) {
     return normalized ? `#${normalized}` : "#";
 }
 
+function normalizeUserStatus(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return ["online", "busy", "offline"].includes(normalized) ? normalized : "online";
+}
+
+function getUserStatusMeta(status) {
+    const normalized = normalizeUserStatus(status);
+    if (normalized === "busy") {
+        return { value: "busy", label: "Busy", indicatorClass: "is-busy" };
+    }
+    if (normalized === "offline") {
+        return { value: "offline", label: "Offline", indicatorClass: "is-offline" };
+    }
+    return { value: "online", label: "Online", indicatorClass: "is-online" };
+}
+
+function readStoredUserStatus() {
+    try {
+        return normalizeUserStatus(localStorage.getItem(USER_STATUS_STORAGE_KEY) || "online");
+    } catch (_error) {
+        return "online";
+    }
+}
+
+function persistUserStatus(status) {
+    try {
+        localStorage.setItem(USER_STATUS_STORAGE_KEY, normalizeUserStatus(status));
+    } catch (_error) {
+        // ignore localStorage failures
+    }
+}
+
+function updateTopbarStatusUi() {
+    const button = document.getElementById("userStatusBtn");
+    const label = document.getElementById("userStatusLabel");
+    const dot = document.getElementById("userStatusDot");
+    const meta = getUserStatusMeta(currentUser.status);
+
+    if (label) {
+        label.textContent = meta.label;
+    }
+
+    if (dot) {
+        dot.classList.remove("is-online", "is-busy", "is-offline");
+        dot.classList.add(meta.indicatorClass);
+    }
+
+    if (button) {
+        button.classList.remove("is-online", "is-busy", "is-offline");
+        button.classList.add(`is-${meta.value}`);
+        button.title = `Change your status (${meta.label})`;
+    }
+
+    document.querySelectorAll("#userStatusMenu .status-option").forEach((option) => {
+        option.classList.toggle("is-active", option.dataset.actionArg === meta.value);
+    });
+}
+
+function closeStatusMenu() {
+    const menu = document.getElementById("userStatusMenu");
+    const button = document.getElementById("userStatusBtn");
+    hideElement(menu);
+    if (button) {
+        button.setAttribute("aria-expanded", "false");
+    }
+}
+
+function applyUniverseUsers(users = []) {
+    const byUserId = new Map();
+    const byUsername = new Map();
+
+    users.forEach((entry) => {
+        if (!entry) return;
+        const normalizedStatus = normalizeUserStatus(entry.status);
+        const normalizedUserId = normalizeUserIdInput(entry.userId || "");
+        const normalizedUsername = String(entry.username || "").trim().toLowerCase();
+        const normalizedEntry = {
+            ...entry,
+            status: normalizedStatus,
+            online: normalizedStatus === "online"
+        };
+
+        if (normalizedUserId) byUserId.set(normalizedUserId, normalizedEntry);
+        if (normalizedUsername) byUsername.set(normalizedUsername, normalizedEntry);
+    });
+
+    contacts = contacts.map((contact) => {
+        const match = byUserId.get(normalizeUserIdInput(contact.userId || "")) ||
+            byUsername.get(String(contact.username || "").trim().toLowerCase());
+        const status = match ? normalizeUserStatus(match.status) : "offline";
+        return {
+            ...contact,
+            status,
+            online: status === "online"
+        };
+    });
+
+    directoryUsers = directoryUsers.map((user) => {
+        const match = byUserId.get(normalizeUserIdInput(user.userId || "")) ||
+            byUsername.get(String(user.username || "").trim().toLowerCase());
+        const status = match ? normalizeUserStatus(match.status) : "offline";
+        return {
+            ...user,
+            status,
+            online: status === "online"
+        };
+    });
+
+    const selfMatch = byUserId.get(normalizeUserIdInput(currentUser.userId || currentUser.id || "")) ||
+        byUsername.get(String(currentUser.username || "").trim().toLowerCase());
+    if (selfMatch) {
+        currentUser.status = normalizeUserStatus(selfMatch.status);
+    }
+
+    updateTopbarStatusUi();
+    updateFriendsList();
+}
+
+function setCurrentUserStatus(status, { persist = true, emit = true } = {}) {
+    currentUser.status = normalizeUserStatus(status);
+    if (persist) {
+        persistUserStatus(currentUser.status);
+    }
+    updateTopbarStatusUi();
+    if (emit && socket.connected) {
+        socket.emit("set-user-status", { status: currentUser.status });
+    }
+}
+
 function readUiSettings() {
     try {
         const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}");
@@ -443,6 +591,21 @@ function togglePlanetSaved(roomId) {
     persistSavedPlanets();
     updateSavedPlanets();
     updatePlanetsList();
+    syncPlanetStarControls(roomId);
+}
+
+function syncPlanetStarControls(roomId = selectedPlanet?.roomId || "") {
+    const starButton = document.getElementById("planetDetailStarBtn");
+    if (!starButton) return;
+
+    const activeRoomId = roomId || selectedPlanet?.roomId || "";
+    const isStarred = activeRoomId ? isPlanetSaved(activeRoomId) : false;
+
+    starButton.classList.toggle("is-starred", isStarred);
+    starButton.setAttribute("aria-pressed", isStarred ? "true" : "false");
+    starButton.title = isStarred ? "Remove from starred planets" : "Save to starred planets";
+    starButton.textContent = isStarred ? "⭐ Starred" : "☆ Star";
+    starButton.disabled = !activeRoomId;
 }
 
 function normalizeHexColor(value, fallback) {
@@ -916,11 +1079,11 @@ function updateFriendsList() {
         <div class="item friend-item" data-action="openFriendMenu" data-action-arg="${contact.userId}">
             <div>
                 <div class="item-name">${contact.username}</div>
-                <div class="item-status">${contact.online ? "Online" : "Offline"} · ${contact.role}</div>
+                <div class="item-status is-${getUserStatusMeta(contact.status || (contact.online ? "online" : "offline")).value}">${getUserStatusMeta(contact.status || (contact.online ? "online" : "offline")).label} · ${contact.role}</div>
             </div>
             <div class="item-meta">
                 ${contact.unreadMessages > 0 ? `<div class="message-count">${contact.unreadMessages}</div>` : ""}
-                ${contact.online ? '<div class="online-indicator"></div>' : ""}
+                <div class="online-indicator ${getUserStatusMeta(contact.status || (contact.online ? "online" : "offline")).indicatorClass}"></div>
             </div>
         </div>
     `).join("");
@@ -935,26 +1098,33 @@ function updateSavedPlanets() {
             || savedPlanets.find((planet) => planet.roomId === roomId))
         .filter(Boolean);
     const ownedEntries = savedPlanets.filter((planet) => planet.ownerUserId === (currentUser.userId || currentUser.id));
+    const ownedIds = new Set(ownedEntries.map((planet) => planet.roomId));
+    const starredOnlyEntries = starredEntries.filter((planet) => !ownedIds.has(planet.roomId));
 
     if (starredEntries.length === 0 && ownedEntries.length === 0) {
         list.innerHTML = "<div class='empty-state is-centered'>Star a planet or create one to pin it here.</div>";
         return;
     }
 
-    const renderPlanetItem = (planet) => `
+    const renderPlanetItem = (planet) => {
+        const isStarred = isPlanetSaved(planet.roomId);
+        const status = planet.status === "online" ? "Online" : "Offline";
+        return `
         <div class="item saved-planet-item" data-action="quickConnectSavedPlanet" data-action-arg="${planet.roomId}" data-room-id="${planet.roomId}">
-            <div>
+            <div class="saved-planet-copy">
                 <div class="item-name">${planet.roomName}</div>
-                <div class="item-status">${planet.users}/${planet.maxUsers} 🚀</div>
+                <div class="item-status">${planet.users}/${planet.maxUsers} 🚀 · ${status}</div>
             </div>
+            <button class="planet-star-btn ${isStarred ? "is-starred" : ""}" type="button" data-action="toggleSavedPlanet" data-action-arg="${planet.roomId}" title="${isStarred ? "Remove from starred planets" : "Save planet"}" aria-pressed="${isStarred ? "true" : "false"}">${isStarred ? "⭐" : "☆"}</button>
         </div>
     `;
+    };
 
     list.innerHTML = `
         ${ownedEntries.length ? `<div class="navigation-group-title">🛠️ My Planets</div>` : ""}
         ${ownedEntries.map(planet => renderPlanetItem(planet)).join("")}
-        ${starredEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
-        ${starredEntries.map(planet => renderPlanetItem(planet)).join("")}
+        ${starredOnlyEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
+        ${starredOnlyEntries.map(planet => renderPlanetItem(planet)).join("")}
     `;
 }
 
@@ -1147,6 +1317,7 @@ window.showPlanetDetails = (roomId) => {
 
     if (title) title.textContent = planet.roomName;
     if (desc) desc.textContent = planet.description;
+    syncPlanetStarControls(planet.roomId);
     if (hostActionBtn) {
         hostActionBtn.textContent = "Connect";
         hostActionBtn.disabled = false;
@@ -1492,7 +1663,8 @@ function addFriendToRoster(entry) {
             userId: entry.userId,
             username: entry.username,
             role: entry.role || "member",
-            online: !!entry.online,
+            status: normalizeUserStatus(entry.status || (entry.online ? "online" : "offline")),
+            online: normalizeUserStatus(entry.status || (entry.online ? "online" : "offline")) === "online",
             unreadMessages: 0
         }
     ];
@@ -1509,7 +1681,8 @@ window.addFriendByUsername = (username) => {
         userId: `usr_${lookup.replace(/[^a-z0-9]+/g, "_")}`,
         username: clean,
         role: "member",
-        online: true
+        status: "offline",
+        online: false
     };
     const added = addFriendToRoster(entry || fallback);
     if (added) {
@@ -1537,6 +1710,21 @@ function addPlanetToSaved(entry) {
     updateSavedPlanets();
     return true;
 }
+
+window.toggleStatusMenu = () => {
+    const menu = document.getElementById("userStatusMenu");
+    const button = document.getElementById("userStatusBtn");
+    const isOpen = toggleElement(menu);
+    if (button) {
+        button.setAttribute("aria-expanded", String(isOpen));
+    }
+};
+
+window.setUserStatusAction = (status) => {
+    setCurrentUserStatus(status);
+    closeStatusMenu();
+    addLogEntry("PRESENCE", `Status set to ${getUserStatusMeta(status).label}`, "Visible to other universe users");
+};
 
 window.openFindPanel = () => {
     if (activeUtilityPanel === "find") {
@@ -2035,8 +2223,14 @@ socket.on("rooms-summary", (summaries) => {
     syncPlanetsFromRoomsSummary(summaries);
 });
 
+socket.on("universe-users", (users) => {
+    applyUniverseUsers(Array.isArray(users) ? users : []);
+});
+
 socket.on("connect", () => {
     addLogEntry("CONNECTED", "Universe link established", "Realtime channel ready");
+    socket.emit("set-user-status", { status: currentUser.status || "online" });
+    socket.emit("universe-users");
     socket.emit("rooms-summary");
 });
 
@@ -2106,6 +2300,11 @@ window.toggleSavedPlanet = (roomId) => {
     togglePlanetSaved(roomId);
 };
 
+window.toggleSelectedPlanetStar = () => {
+    if (!selectedPlanet?.roomId) return;
+    togglePlanetSaved(selectedPlanet.roomId);
+};
+
 // === Messaging ===
 export function initUniverseUi() {
     uiSettings = readUiSettings();
@@ -2137,6 +2336,7 @@ export function initUniverseUi() {
         }
 
         updateUserIdentity();
+        updateTopbarStatusUi();
         updateFriendsList();
         updateSavedPlanets();
         updatePlanetsList();
@@ -2221,6 +2421,11 @@ export function initUniverseUi() {
 
         const menu = actionElement.closest(".context-menu");
         if (menu) menu.remove();
+    });
+
+    document.addEventListener("click", (event) => {
+        if (event.target.closest("#userStatusControl")) return;
+        closeStatusMenu();
     });
 
     document.querySelectorAll("[data-overlay-close]").forEach((overlay) => {
