@@ -1279,6 +1279,23 @@ body.planet-live #lobbyPanel {
   color: #ffe3b0;
 }
 
+.participant-add {
+  margin-left: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.participant-add:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
 .target-chip {
   display: flex;
   align-items: center;

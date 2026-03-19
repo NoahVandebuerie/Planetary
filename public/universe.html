@@ -8,94 +8,6 @@
     <link rel="stylesheet" href="universe.css">
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.9.0/dist/es-module-shims.js"></script>
     <script type="importmap-shim" src="universe.importmap.json"></script>
-    <style>
-        /* additional / overrides to replace emoji with proper SVG/icon-like buttons */
-        .topbar-icon, .notification-bell, .btn-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--accent-soft);
-            border: 1px solid var(--panel-edge);
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--accent);
-            gap: 6px;
-            transition: all 0.18s ease;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(4px);
-            line-height: 1;
-            min-width: 36px;
-        }
-
-        .topbar-icon:hover, .notification-bell:hover, .btn-icon:hover {
-            background: rgba(var(--accent-rgb), 0.25);
-            border-color: var(--panel-edge-strong);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px var(--panel-glow);
-            color: #b0e0ff;
-        }
-
-        /* specific icon treatments */
-        .topbar-icon[data-action="openFindPanel"]::before {
-            content: "👤";
-            font-size: 1rem;
-            filter: drop-shadow(0 1px 2px rgba(var(--accent-rgb), 0.16));
-        }
-        .topbar-icon[data-action="openSettings"]::before {
-            content: "⚙️";
-            font-size: 1rem;
-        }
-        .notification-bell::before {
-            content: "🔔";
-            font-size: 1.1rem;
-        }
-
-        /* remove old emoji-only display, keep accessible text */
-        .topbar-icon span, .notification-bell span {
-            margin-left: 4px;
-            font-size: 0.85rem;
-        }
-
-        /* replace raw emoji inside buttons with actual button text + hidden labels? 
-           we keep emoji as visual but now inside styled button — consistent with theme */
-        .notification-bell .notification-badge {
-            background: var(--danger);
-            color: white;
-            top: -4px;
-            right: -4px;
-            font-size: 0.7rem;
-        }
-
-        /* contextual icon buttons inside panels (close, manage etc) remain as before but we unify btn-small */
-        .btn-small.btn-close {
-            background: rgba(var(--danger-rgb), 0.2);
-            border-color: rgba(var(--danger-rgb), 0.3);
-            color: #ffb0b0;
-            font-weight: 600;
-            padding: 8px 14px;
-        }
-
-        .btn-small.btn-close:hover {
-            background: rgba(var(--danger-rgb), 0.35);
-            border-color: rgba(var(--danger-rgb), 0.6);
-        }
-
-        /* planet action grid: bring online / manage / enter etc are already text buttons, fine */
-
-        /* settings dialog toggle text adjustment */
-        .settings-toggle input {
-            accent-color: var(--success);
-        }
-
-        /* ensure consistent icon-less topbar icons fallback */
-        .topbar-actions {
-            gap: 8px;
-        }
-
-        /* optional: subtle background for the whole topbar */
-    </style>
 </head>
 <body>
     <div id="universeRoot"></div>
@@ -112,8 +24,9 @@
             </div>
             <div class="topbar-actions">
                 <!-- transformed emoji buttons into actual styled buttons with accessible labels -->
-                <button class="topbar-icon" id="searchBtn" type="button" data-action="openFindPanel" title="Add Friend">
-                    <span>Add Friend</span>
+                <button class="topbar-icon topbar-add-btn" id="searchBtn" type="button" data-action="openFindPanel" title="Discover">
+                    <span class="topbar-add-icon">+</span>
+                    <span class="topbar-add-label">Discover</span>
                 </button>
                 <button class="notification-bell" id="notificationBell" type="button" data-action="toggleNotifications" title="Notifications">
                     <span>Alerts</span>
@@ -122,17 +35,20 @@
                 <button class="topbar-icon" id="settingsBtn" type="button" data-action="openSettings" title="Settings">
                     <span>Settings</span>
                 </button>
+                <button class="topbar-icon topbar-logout-btn" id="logoutBtn" type="button" data-action="logoutFromSettings" title="Logout">
+                    <span>Logout</span>
+                </button>
             </div>
 
             <div id="topbarFindPanel" class="topbar-find-panel is-hidden" aria-hidden="true">
                 <div class="topbar-find-head">
                     <div>
-                        <div class="panel-kicker no-margin">Add Friend</div>
-                        <div class="topbar-find-title">Add someone by user ID</div>
+                        <div class="panel-kicker no-margin">Discover</div>
+                        <div class="topbar-find-title">Add someone by user ID or connect a planet</div>
                     </div>
                     <button class="btn-small btn-close" type="button" data-action="closeFindPanel">Close</button>
                 </div>
-                <div class="topbar-find-grid is-single">
+                <div class="topbar-find-grid">
                     <div class="topbar-find-field">
                         <label class="field-label" for="findUserIdInput">User ID</label>
                         <div class="button-group">
@@ -140,8 +56,22 @@
                             <button class="btn-small" type="button" data-action="addContactByUserId">Add Friend</button>
                         </div>
                     </div>
+                    <div class="topbar-find-field">
+                        <label class="field-label" for="planetFindId">Planet ID</label>
+                        <div class="button-group">
+                            <input id="planetFindId" type="text" class="modal-input is-inline" placeholder="planet-alpha">
+                            <button class="btn-small" id="planetFindBtn" type="button" data-action="findPlanet">Connect</button>
+                        </div>
+                        <div class="field-group is-hidden" id="planetFindKeyGroup">
+                            <label class="field-label" for="planetFindKey">Enter password</label>
+                            <input id="planetFindKey" type="password" class="modal-input" placeholder="••••••••">
+                        </div>
+                    </div>
                 </div>
-                <div id="findStatus" class="planet-entry-status is-hidden"></div>
+                <div class="topbar-find-footer">
+                    <div id="findStatus" class="planet-entry-status is-hidden"></div>
+                    <div id="planetFindStatus" class="planet-entry-status is-hidden"></div>
+                </div>
             </div>
         </div>
 
@@ -153,8 +83,8 @@
                     <div class="panel-scroll" id="friendsList"></div>
                 </section>
                 <section class="universe-panel panel-rail">
-                    <div class="panel-kicker">Saved Routes</div>
-                    <div class="sidebar-title">🪐 Your Planets</div>
+                    <div class="panel-kicker">Navigation</div>
+                    <div class="sidebar-title">⭐ Starred Planets</div>
                     <div class="panel-scroll" id="savedPlanets"></div>
                 </section>
 
@@ -240,9 +170,17 @@
                             </label>
                         </div>
 
+                        <div class="field-group">
+                            <label class="field-label" for="panelFocusRange">Panel focus (hover resize)</label>
+                            <div class="range-row">
+                                <input type="range" id="panelFocusRange" min="1" max="1.6" step="0.05" value="1">
+                                <span class="range-value" id="panelFocusValue">1.00x</span>
+                            </div>
+                            <div class="field-help">Keep at 1.0 for static panels. Increase to subtly expand the hovered panel.</div>
+                        </div>
+
                         <div class="modal-buttons">
                             <button class="btn-primary is-flex" id="saveSettingsBtn" type="button" data-action="saveSettings">Save</button>
-                            <button class="btn-small btn-danger-soft is-flex" id="logoutSettingsBtn" type="button" data-action="logoutFromSettings">Logout</button>
                             <button class="btn-small btn-close is-flex" id="closeSettingsBtn" type="button" data-action="closeSettings">Cancel</button>
                         </div>
                     </div>
@@ -254,23 +192,8 @@
                         <div class="details-header">
                             <div class="panel-title no-margin">🪐 Access Panel</div>
                         </div>
-                        <div class="command-subtitle">Browse public planets below or select one from your saved routes. Private planets require an exact Planet ID and password.</div>
+                        <div class="command-subtitle">Public planets are listed below. Use the Add Friend panel to connect by Planet ID when needed.</div>
                         <div class="panel-scroll" id="planetsList"></div>
-                        <div class="divider-line"></div>
-                        <div class="panel-kicker">Connect Planet</div>
-                        <div class="field-group">
-                            <label class="field-label" for="planetFindId">Planet ID</label>
-                            <input id="planetFindId" type="text" class="message-input" placeholder="planet-alpha">
-                        </div>
-                        <div class="field-group is-hidden" id="planetFindKeyGroup">
-                            <label class="field-label" for="planetFindKey">Enter password</label>
-                            <input id="planetFindKey" type="password" class="message-input" placeholder="••••••••">
-                        </div>
-                        <div class="button-group">
-                            <button class="btn-secondary" id="planetFindBtn" type="button" data-action="findPlanet">Connect planet</button>
-                        </div>
-                        <div class="field-help">Only public planets appear in this panel. Private planets can only be opened with their Planet ID and password.</div>
-                        <div id="planetFindStatus" class="planet-entry-status is-hidden"></div>
                     </div>
                 </section>
 
@@ -293,13 +216,6 @@
                                 <option value="2">2</option>
                                 <option value="3">3</option>
                                 <option value="4" selected>4</option>
-                            </select>
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label" for="planetCreateMode">Transfer-mode</label>
-                            <select id="planetCreateMode" class="modal-input">
-                                <option value="all" selected>Iedereen kan sturen</option>
-                                <option value="owner">Alleen owner kan sturen</option>
                             </select>
                         </div>
                         <div class="field-group">
@@ -394,79 +310,10 @@
         </div>
     </div>
 
-    <div id="roomTransferModal" class="modal-overlay is-hidden">
-        <div class="modal-content modal-90">
-            <div class="transfer-modal-header">
-                <div>
-                    <h2 class="transfer-title" id="roomTitle">Transfer Room</h2>
-                    <div class="transfer-room-code" id="roomCodeDisplay">Planet ID: --</div>
-                </div>
-                <div class="transfer-header-actions">
-                    <div id="connectionStatus" class="connection-status">Connected</div>
-                    <button class="btn-small btn-close" id="closeRoomTransferBtn" type="button" data-action="closeRoomTransfer">✕ Close transfer</button>
-                </div>
-            </div>
-
-            <div class="transfer-modal-body">
-                <div class="transfer-column">
-                    <div class="transfer-panel">
-                        <div class="transfer-panel-title">👥 Users</div>
-                        <div id="participantsList" class="transfer-list">
-                            <div class="empty-accent">🟢 You</div>
-                        </div>
-                    </div>
-
-                    <div class="transfer-panel">
-                        <div class="transfer-panel-title">📤 Send To</div>
-                        <div id="targetsList" class="transfer-list">
-                            <div class="muted-note">No targets available</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="transfer-column">
-                    <div class="dropzone" id="dropzone">
-                        <div class="dropzone-icon">📁</div>
-                        <div class="dropzone-title">Drop files here</div>
-                        <div class="dropzone-subtitle">or click to select</div>
-                        <input type="file" id="fileInput" class="hidden-input" multiple>
-                    </div>
-
-                    <div class="transfer-panel is-fill">
-                        <div class="transfer-panel-title">⚡ Transfers</div>
-                        <div id="transferQueue" class="transfer-list">
-                            <div class="muted-note">No active transfers</div>
-                        </div>
-                    </div>
-
-                    <div class="transfer-panel is-short">
-                        <div class="transfer-panel-title">📝 Activity Log</div>
-                        <div id="activityLog" class="transfer-list">
-                            <div class="muted-note">Connection established</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="transfer-column">
-                    <div class="transfer-panel is-medium">
-                        <div class="transfer-panel-title">📥 Incoming</div>
-                        <div id="incomingRequests" class="transfer-list">
-                            <div class="muted-note">No incoming requests</div>
-                        </div>
-                    </div>
-
-                    <div class="transfer-panel chat-panel">
-                        <div class="transfer-panel-title">💬 Chat</div>
-                        <div id="chatMessages" class="chat-messages">
-                            <div class="muted-note">Connected to planet</div>
-                        </div>
-                        <div class="transfer-chat-input">
-                            <input type="text" id="chatInput" class="chat-input" placeholder="Type message...">
-                            <button class="btn-small" id="sendChatBtn" type="button" data-action="sendChatMessage">Send</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <div id="roomTransferModal" class="modal-overlay room-overlay is-hidden">
+        <div class="room-embed-shell">
+            <button class="room-embed-close" type="button" data-action="closeRoomTransfer" aria-label="Exit transfer room">Exit</button>
+            <div id="roomEmbedRoot" class="room-embed-root"></div>
         </div>
     </div>
 
