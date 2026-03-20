@@ -604,7 +604,7 @@ function syncPlanetStarControls(roomId = selectedPlanet?.roomId || "") {
     starButton.classList.toggle("is-starred", isStarred);
     starButton.setAttribute("aria-pressed", isStarred ? "true" : "false");
     starButton.title = isStarred ? "Remove from starred planets" : "Save to starred planets";
-    starButton.textContent = isStarred ? "⭐ Starred" : "☆ Star";
+    starButton.textContent = isStarred ? "⭐" : "☆";
     starButton.disabled = !activeRoomId;
 }
 
@@ -1123,7 +1123,7 @@ function updateSavedPlanets() {
     list.innerHTML = `
         ${ownedEntries.length ? `<div class="navigation-group-title">🛠️ My Planets</div>` : ""}
         ${ownedEntries.map(planet => renderPlanetItem(planet)).join("")}
-        ${starredOnlyEntries.length ? `<div class="navigation-group-title">⭐ Starred</div>` : ""}
+        ${starredOnlyEntries.length ? `<div class="navigation-group-title">⭐</div>` : ""}
         ${starredOnlyEntries.map(planet => renderPlanetItem(planet)).join("")}
     `;
 }
