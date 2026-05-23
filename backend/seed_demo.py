@@ -1,4 +1,4 @@
-from backend.app import (
+from main import (
     DATABASE_PATH,
     DEFAULT_EXPERIENCE_KEY,
     get_db_connection,

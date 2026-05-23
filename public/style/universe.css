@@ -80,6 +80,18 @@ body[data-panel-theme="aurora-rose"] {
     --planet-card-hover: linear-gradient(135deg, rgba(255, 92, 214, 0.18), rgba(131, 245, 255, 0.1));
 }
 
+.panel-scroll,
+#notificationsList,
+#planetsList,
+#savedPlanets,
+#friendsList,
+#planetCommandView,
+#planetDetailsView,
+.message-box,
+.chat-messages {
+    scrollbar-gutter: stable;
+}
+
 #universeRoot {
     width: 100% !important;
     height: 100% !important;
@@ -657,6 +669,9 @@ canvas {
     overflow: hidden;
     isolation: isolate;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
 .universe-panel:not(.utility-panel):hover,
@@ -775,6 +790,7 @@ canvas {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
 
 #utilityPanel[data-panel-mode="alerts"] .utility-panel-header {
@@ -844,17 +860,36 @@ canvas {
     overflow: hidden;
 }
 
+/* ── Room Transfer Overlay ────────────────────────────────────────── */
+
+/*
+ * Design intent: the overlay is NOT a full-screen takeover.
+ * It appears as one large universe-panel card sitting on top of the space
+ * scene. The background remains clearly visible — only a very light dim
+ * scrim is applied (no blur). The shell matches the glass + neon-edge
+ * treatment of all other universe panels.
+ *
+ * Layer stack:
+ *   Universe canvas / panels       z-index 0–10
+ *   .room-overlay scrim            z-index 1001
+ *   .room-embed-shell (the panel)  inside overlay stacking ctx
+ *   .room-embed-close (Exit btn)   z-index 10 within shell
+ */
+
+/* 1. Scrim — very light dim, NO blur, lets the space scene breathe */
 .room-overlay {
-    align-items: stretch;
-    justify-content: stretch;
-    padding: 0;
-    background:
-        radial-gradient(circle at center, rgba(7, 19, 27, 0.24), rgba(4, 10, 16, 0.7)),
-        linear-gradient(180deg, rgba(4, 10, 16, 0.34), rgba(4, 10, 16, 0.58));
-    backdrop-filter: blur(8px);
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    /* Clear the universe topbar (~80px) and add breathing room all round */
+    padding: 78px 16px 16px;
+    background: rgba(2, 6, 10, 0.35);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.24s ease;
+    transition: opacity 0.28s ease;
 }
 
 .room-overlay.is-open {
@@ -862,70 +897,185 @@ canvas {
     pointer-events: auto;
 }
 
+/* 2. Shell — styled exactly like a .universe-panel card, height-constrained */
 .room-embed-shell {
     position: relative;
-    flex: 1 1 auto;
-    width: 100%;
-    height: 100%;
-    transform: scale(1.02);
-    transition: transform 0.24s ease;
+    isolation: isolate;
+    width: min(1200px, 100%);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    /* Universe panel glass treatment */
+    background:
+        linear-gradient(180deg, rgba(var(--accent-rgb), 0.04), transparent 18%),
+        var(--panel-bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 18px;
+    box-shadow:
+        0 0 0 1px rgba(var(--accent-rgb), 0.08),
+        0 0 24px rgba(var(--accent-rgb), 0.06),
+        0 24px 64px rgba(0, 0, 0, 0.48),
+        inset 0 0 16px rgba(var(--accent-rgb), 0.02);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+
+    transform: scale(0.98) translateY(4px);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Neon inner-border line — same as .universe-panel::after */
+.room-embed-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(145deg, var(--panel-neon-core), transparent 28%, transparent 72%, var(--panel-neon-line));
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    pointer-events: none;
+    opacity: 0.6;
+    z-index: 0;
 }
 
 .room-overlay.is-open .room-embed-shell {
-    transform: scale(1);
+    transform: scale(1) translateY(0);
 }
 
-body.room-embed-active .topbar {
-    filter: blur(1px);
-    opacity: 0.85;
-    transition: opacity 0.2s ease, filter 0.2s ease;
+/* 3. Exit button — top-right corner of the shell */
+.room-embed-close {
+    position: absolute;
+    top: 11px;
+    right: 14px;
+    z-index: 10;
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--danger-rgb), 0.28);
+    background: rgba(var(--danger-rgb), 0.1);
+    color: rgba(255, 206, 206, 0.85);
+    font-family: var(--font-ui, sans-serif);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
 }
 
+.room-embed-close:hover {
+    background: rgba(var(--danger-rgb), 0.2);
+    border-color: rgba(var(--danger-rgb), 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* 4. Scroll container — fills the shell, scrolls the room content */
 .room-embed-root {
+    position: relative;
+    z-index: 1;               /* above ::after neon border */
+    flex: 1 1 auto;
     width: 100%;
-    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
     display: flex;
     justify-content: center;
-    align-items: stretch;
-    overflow: auto;
-    padding: 20px clamp(16px, 2.5vw, 32px) 28px;
+    align-items: flex-start;
+    padding: 12px clamp(12px, 2vw, 24px) 20px;
+    scrollbar-gutter: stable;
 }
 
+/* 5. Room app wrapper */
 .room-embed-root .app.room-embed-app {
-    width: min(1280px, 100%);
-    max-width: 1280px;
-    min-height: 100%;
+    width: min(1160px, 100%);
+    max-width: 1160px;
+    min-height: min-content;
     margin: 0 auto;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 12px;
 }
 
+/* 6. Topbar inside the shell — matches the panel aesthetic, clears Exit button */
 .room-embed-root .room-embed-topbar {
-    width: min(1180px, 100%);
-    margin: 0 auto;
-    max-width: 1180px;
-    background: rgba(6, 14, 20, 0.74);
-    border-color: rgba(var(--accent-rgb), 0.18);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 10px 14px;
+    padding-right: 110px;      /* keep content clear of the Exit button */
+    /* Slightly more opaque than the default topbar since we're inside a panel */
+    background: rgba(4, 10, 16, 0.6);
+    border-color: rgba(var(--accent-rgb), 0.12);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    /* Tighter radius to fit flush inside the shell */
+    border-radius: 12px;
 }
 
+.room-embed-root .room-embed-topbar .title {
+    font-size: 1.25rem;
+}
+
+.room-embed-root .room-embed-topbar .subtitle {
+    font-size: 0.78rem;
+}
+
+.room-embed-root .room-embed-topbar .logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    letter-spacing: 1px;
+}
+
+.room-embed-root .room-embed-topbar .room-tools {
+    gap: 6px;
+    padding: 4px 6px;
+}
+
+.room-embed-root .room-embed-topbar .connection-pill {
+    padding: 5px 10px;
+    font-size: 0.76rem;
+}
+
+.room-embed-root .room-embed-topbar .room-code {
+    padding: 4px 2px 4px 8px;
+    font-size: 0.76rem;
+}
+
+.room-embed-root .room-embed-topbar .copy-pill {
+    font-size: 0.76rem;
+    padding: 3px 8px;
+}
+
+/* 7. Content areas - Compact overrides */
 .room-embed-main {
     flex: 1 1 auto;
     min-height: 0;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 .room-stage-shell {
-    width: min(1180px, 100%);
+    width: 100%;
     min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 16px;
+    justify-content: flex-start;
+    gap: 12px;
 }
 
 .room-stage-shell > .panel:not(.hidden),
@@ -933,71 +1083,157 @@ body.room-embed-active .topbar {
     width: 100%;
 }
 
-.room-embed-root #lobbyPanel,
-.room-embed-root #themePanel {
-    width: min(760px, 100%);
-    margin: 0 auto;
+/* Make inner cards and panels extremely compact */
+.room-embed-root .card {
+    padding: 12px 14px;
+    border-radius: 12px;
 }
 
-.room-embed-root #lobbyPanel {
+.room-embed-root .col {
+    gap: 10px;
+}
+
+.room-embed-root #lobbyPanel,
+.room-embed-root #themePanel {
+    width: min(680px, 100%);
+    margin: 0 auto;
+    padding: 16px;
     background:
-        radial-gradient(circle at top center, rgba(58, 169, 255, 0.16), transparent 52%),
-        rgba(7, 19, 27, 0.9);
-    border-color: rgba(90, 180, 255, 0.28);
+        radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.08), transparent 48%),
+        rgba(4, 11, 18, 0.65);
+    border-color: rgba(var(--accent-rgb), 0.2);
     box-shadow:
-        0 28px 80px rgba(0, 0, 0, 0.38),
-        0 0 36px rgba(58, 169, 255, 0.14);
+        0 12px 36px rgba(0, 0, 0, 0.24),
+        0 0 16px rgba(var(--accent-rgb), 0.08);
 }
 
 .room-embed-root #roomPanel {
-    width: min(1180px, 100%);
-    max-height: min(80vh, 920px);
+    width: 100%;
     margin: 0 auto;
-    overflow: auto;
+    overflow: visible;
     background:
-        radial-gradient(circle at top center, rgba(58, 169, 255, 0.08), transparent 38%),
-        rgba(7, 19, 27, 0.88);
-    border-color: rgba(90, 180, 255, 0.22);
+        radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.04), transparent 36%),
+        rgba(4, 11, 18, 0.6);
+    border-color: rgba(var(--accent-rgb), 0.16);
     box-shadow:
-        0 32px 90px rgba(0, 0, 0, 0.42),
-        0 0 42px rgba(58, 169, 255, 0.12);
-    scrollbar-gutter: stable;
+        0 12px 36px rgba(0, 0, 0, 0.24),
+        0 0 20px rgba(var(--accent-rgb), 0.06);
 }
 
 .room-embed-root #roomPanel .grid {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    gap: 18px;
+    gap: 12px;
     align-items: start;
 }
 
-.room-embed-root #roomPanel .col,
-.room-embed-root #roomPanel .card {
-    min-height: 0;
+/* Compact journey steps (Flight Deck) */
+.room-embed-root .journey-steps {
+    margin-top: 10px;
+    gap: 5px;
 }
 
-.room-embed-root #roomPanel .card {
-    overflow: hidden;
+.room-embed-root .journey-step {
+    padding: 5px 8px;
+    font-size: 0.68rem;
+    border-radius: 6px;
 }
 
-.room-embed-close {
-    position: absolute;
-    top: 18px;
-    right: 18px;
-    z-index: 5;
-    padding: 10px 14px;
-    border-radius: 10px;
-    border: 1px solid rgba(var(--danger-rgb), 0.4);
-    background: rgba(var(--danger-rgb), 0.2);
-    color: #ffd5d5;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+.room-embed-root .journey-headline {
+    font-size: 1.05rem;
+    margin-bottom: 4px;
 }
 
-.room-embed-close:hover {
-    transform: translateY(-1px);
-    background: rgba(var(--danger-rgb), 0.3);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+.room-embed-root .journey-subline {
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
+/* Compact peer readiness */
+.room-embed-root .readiness-list {
+    margin-top: 8px;
+    gap: 6px;
+}
+
+.room-embed-root .readiness-item {
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+
+/* Compact dropzone */
+.room-embed-root .dropzone {
+    min-height: 110px;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(7, 19, 27, 0.4);
+}
+
+.room-embed-root .drop-icon {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+}
+
+.room-embed-root .drop-title {
+    font-size: 0.88rem;
+}
+
+.room-embed-root .drop-sub {
+    font-size: 0.76rem;
+}
+
+/* Tighter scrolling areas for list elements */
+.room-embed-root .chat-messages {
+    max-height: 120px;
+    gap: 6px;
+}
+
+.room-embed-root .chat-message {
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+}
+
+.room-embed-root .requests,
+.room-embed-root .queue,
+.room-embed-root .log {
+    max-height: 96px;
+    gap: 5px;
+}
+
+.room-embed-root .participants,
+.room-embed-root .targets {
+    gap: 6px;
+}
+
+.room-embed-root .participant,
+.room-embed-root .target-peer,
+.room-embed-root .queue-item,
+.room-embed-root .log-entry {
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.84rem;
+}
+
+/* Compact inputs and forms */
+.room-embed-root input[type="text"],
+.room-embed-root textarea,
+.room-embed-root select {
+    padding: 8px 10px;
+    font-size: 0.86rem;
+    border-radius: 8px;
+}
+
+.room-embed-root .primary-btn,
+.room-embed-root .ghost-btn {
+    padding: 8px 14px;
+    font-size: 0.84rem;
+    border-radius: 8px;
+}
+
+/* 8. Keep the universe topbar crisp and non-interactive while room is open */
+body.room-embed-active .universe-ui > .topbar {
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 0.24s ease;
 }
 
 .access-panel {
@@ -1038,6 +1274,7 @@ body.room-embed-active .topbar {
     min-height: 0;
     overscroll-behavior: contain;
     padding-right: 4px;
+    scrollbar-gutter: stable;
 }
 
 #planetsView,
@@ -2039,6 +2276,7 @@ button:disabled {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr;
     gap: 20px;
+    scrollbar-gutter: stable;
 }
 
 .transfer-column {
@@ -2049,6 +2287,7 @@ button:disabled {
 
 .transfer-panel {
     border-radius: 16px;
+    scrollbar-gutter: stable;
 }
 
 .transfer-panel-title {

@@ -36,7 +36,7 @@ const themeBg = byId("themeBg");
 const themeFont = byId("themeFont");
 const themeSaveBtn = byId("themeSaveBtn");
 const themeResetBtn = byId("themeResetBtn");
-const leaveRoomBtn = byId("leaveRoomBtn");
+const leaveRoomBtn = null; // Leave button removed from UI; leave is handled programmatically via window.roomEmbedLeave
 const participantsList = byId("participantsList");
 const targetsList = byId("targetsList");
 const incomingRequests = byId("incomingRequests");
@@ -982,13 +982,7 @@ socket.on("chat-message", ({ from, name, text, time }) => {
     });
 });
 
-if (leaveRoomBtn) {
-    leaveRoomBtn.onclick = () => {
-        if (!currentRoomId) return;
-        socket.emit("leave-room", { room: currentRoomId });
-        cleanupRoomState();
-    };
-}
+// Leave button removed from UI; leave is triggered via window.roomEmbedLeave
 
 function applyEmbedOptions(options) {
     if (!options || typeof options !== "object") return;
@@ -1641,9 +1635,7 @@ if (fileInput) {
 
 window.roomEmbedStart = applyEmbedOptions;
 window.roomEmbedLeave = () => {
-    if (leaveRoomBtn && !leaveRoomBtn.disabled) {
-        leaveRoomBtn.click();
-        return;
-    }
+    if (!currentRoomId) return;
+    socket.emit("leave-room", { room: currentRoomId });
     cleanupRoomState();
 };
