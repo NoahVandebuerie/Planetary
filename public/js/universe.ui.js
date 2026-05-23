@@ -2346,9 +2346,29 @@ export function initUniverseUi() {
         updateAccessConnectionStatus();
         syncPlanetCommandUi();
         await loadPersistedEventLog();
-        addLogEntry("CONNECTED", `User connected to universe`, `${currentUser.username} session ready`);
         socket.connect();
         socket.emit("rooms-summary");
+
+        // Handle Quick Transfer action from landing page
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("action") === "quick-transfer") {
+            const roomId = urlParams.get("roomId");
+            const roomCode = urlParams.get("roomCode");
+            const roomName = urlParams.get("roomName") || "Quick Planet";
+            
+            // Clear URL params to keep the address bar clean
+            window.history.replaceState(null, "", window.location.pathname);
+            
+            setTimeout(() => {
+                window.openRoomTransfer(roomId, roomCode, roomName, "create", {
+                    roomName: roomName,
+                    description: "Temporary space lane",
+                    maxParticipants: 4,
+                    allowChat: true,
+                    accentColor: "#3aa9ff"
+                });
+            }, 600);
+        }
     };
 
     initializeUniverse();

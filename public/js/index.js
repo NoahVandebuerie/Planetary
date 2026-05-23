@@ -47,12 +47,15 @@
     });
   });
 
+  let loggedIn = false;
+
   async function checkMe() {
     try {
       const res = await fetch("/api/me");
       if (!res.ok) return;
       const data = await res.json();
       if (data && data.user) {
+        loggedIn = true;
         if (logoutBtn) logoutBtn.classList.remove("hidden");
         setStatus(`Ingelogd als ${data.user.username}.`, false);
         if (universeLink) {
@@ -64,6 +67,69 @@
         }
       }
     } catch (_e) {}
+  }
+
+  // === Quick Orbit Transfer ===
+  const quickTransferBtn = document.getElementById("quickTransferBtn");
+  const quickTransferStatus = document.getElementById("quickTransferStatus");
+
+  function setQuickStatus(msg, isError) {
+    if (!quickTransferStatus) return;
+    quickTransferStatus.textContent = msg || "";
+    quickTransferStatus.className = "quick-transfer-status";
+    if (msg) {
+      quickTransferStatus.classList.add(isError ? "error" : "success");
+    }
+  }
+
+  if (quickTransferBtn) {
+    quickTransferBtn.addEventListener("click", async () => {
+      const rawName = document.getElementById("quickUsername").value.trim();
+      const rawPlanet = document.getElementById("quickPlanetName").value.trim();
+
+      const username = rawName || "Pilot";
+      const planetName = rawPlanet || "Quick Space Lane";
+
+      // Generate a temporary planet ID and orbit code following the universe spec
+      const roomId = Math.random().toString(36).substring(2, 6) + Math.random().toString(36).substring(2, 6);
+      const roomCode = Math.random().toString(36).substring(2, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+
+      quickTransferBtn.disabled = true;
+      setQuickStatus("Preparing orbital space lane...", false);
+
+      if (loggedIn) {
+        // Direct redirect if already logged in
+        setQuickStatus("Opening universe navigation...", false);
+        window.location.href = `universe.html?action=quick-transfer&roomId=${roomId}&roomCode=${roomCode}&roomName=${encodeURIComponent(planetName)}`;
+        return;
+      }
+
+      // Automatically register a guest account
+      const randSuffix = Math.floor(Math.random() * 10000);
+      const guestUser = `${username.replace(/[^a-zA-Z0-9]+/g, "")}_${randSuffix}`;
+      const guestEmail = `${username.toLowerCase().replace(/[^a-z0-9]+/g, "")}_${randSuffix}@planetary.guest`;
+      const guestPass = `guest_${Math.random().toString(36).substring(2, 8)}`;
+
+      try {
+        const res = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: guestUser, email: guestEmail, password: guestPass })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setQuickStatus(data.error || "Failed to establish guest session.", true);
+          quickTransferBtn.disabled = false;
+          return;
+        }
+
+        setQuickStatus("Establishing secure connection...", false);
+        window.location.href = `universe.html?action=quick-transfer&roomId=${roomId}&roomCode=${roomCode}&roomName=${encodeURIComponent(planetName)}`;
+      } catch (err) {
+        setQuickStatus("Server communication lost.", true);
+        quickTransferBtn.disabled = false;
+      }
+    });
   }
 
   if (loginBtn) {
