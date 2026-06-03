@@ -30,18 +30,6 @@
     {
       "src": "/health",
       "dest": "server.js"
-    },
-    {
-      "src": "/style/(.*)",
-      "dest": "/public/style/$1"
-    },
-    {
-      "src": "/js/(.*)",
-      "dest": "/public/js/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
     }
   ]
 }
