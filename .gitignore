@@ -1,2 +1,8 @@
 backend/data/
+backend/.venv/
 __pycache__/
+node_modules/
+.env*.local
+.DS_Store
+*.db
+.idea/

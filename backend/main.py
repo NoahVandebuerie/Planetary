@@ -14,12 +14,21 @@ from pydantic import BaseModel, EmailStr
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+USE_POSTGRES = bool(DATABASE_URL)
 DATABASE_PATH = Path(os.getenv("PLANETARY_DB_PATH", DATA_DIR / "planetary.db"))
 SESSION_COOKIE_NAME = "p2p_session"
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
 DEFAULT_ROLE = "member"
 DEFAULT_EXPERIENCE_KEY = "explorer"
 APP_ENV = os.getenv("PLANETARY_ENV", "development").strip().lower()
+
+if USE_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+    DbIntegrityError = psycopg2.IntegrityError
+else:
+    DbIntegrityError = sqlite3.IntegrityError
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -52,49 +61,98 @@ class EventLogPayload(BaseModel):
     detail: str = ""
 
 
-def get_db_connection() -> sqlite3.Connection:
+def _pg_placeholder(sql: str) -> str:
+    return sql.replace("?", "%s")
+
+
+class _CursorWrapper:
+    """Wraps a psycopg2 cursor to match sqlite3's connection.execute() return style."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, sql: str, params=None):
+        self._cursor.execute(_pg_placeholder(sql), params or ())
+        return self
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+class _PgConnectionWrapper:
+    """Wraps a psycopg2 connection to provide the same interface as sqlite3.Connection."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def execute(self, sql: str, params=None):
+        wrapper = _CursorWrapper(self._cursor)
+        return wrapper.execute(sql, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            self._conn.commit()
+        else:
+            self._conn.rollback()
+        self._cursor.close()
+        self._conn.close()
+        return False
+
+
+def get_db_connection():
+    if USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        return _PgConnectionWrapper(conn)
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
-def ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
-    columns = {
-        row["name"]
-        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-    }
-    if column_name in columns:
-        return
-    connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
-
-
 def init_database() -> None:
+    if USE_POSTGRES:
+        _init_database_pg()
+    else:
+        _init_database_sqlite()
+
+
+def _init_database_sqlite() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with get_db_connection() as connection:
-        connection.executescript(
-            """
-            PRAGMA foreign_keys = ON;
-
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
                 password_salt TEXT NOT NULL,
-                created_at INTEGER NOT NULL
-            );
-
+                created_at INTEGER NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                experience_key TEXT NOT NULL DEFAULT 'explorer'
+            )
+        """)
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 expires_at INTEGER NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-            CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-
+            )
+        """)
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS event_logs (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -103,19 +161,61 @@ def init_database() -> None:
                 detail TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-
+            )
+        """)
+        connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_event_logs_user_created_at
-            ON event_logs(user_id, created_at DESC);
-            """
-        )
-        ensure_column(connection, "users", "role", f"TEXT NOT NULL DEFAULT '{DEFAULT_ROLE}'")
-        ensure_column(
-            connection,
-            "users",
-            "experience_key",
-            f"TEXT NOT NULL DEFAULT '{DEFAULT_EXPERIENCE_KEY}'",
-        )
+            ON event_logs(user_id, created_at DESC)
+        """)
+        connection.commit()
+
+
+def _init_database_pg() -> None:
+    with get_db_connection() as connection:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                email TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                created_at BIGINT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                experience_key TEXT NOT NULL DEFAULT 'explorer'
+            )
+        """)
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower
+            ON users (LOWER(username))
+        """)
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower
+            ON users (LOWER(email))
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at BIGINT NOT NULL,
+                expires_at BIGINT NOT NULL
+            )
+        """)
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS event_logs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                detail TEXT NOT NULL DEFAULT '',
+                created_at BIGINT NOT NULL
+            )
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_event_logs_user_created_at
+            ON event_logs(user_id, created_at DESC)
+        """)
         connection.commit()
 
 
@@ -140,7 +240,7 @@ def verify_password(password: str, salt_hex: str, expected_hash: str) -> bool:
     return hmac.compare_digest(actual_hash, expected_hash)
 
 
-def create_session(connection: sqlite3.Connection, user_id: str) -> str:
+def create_session(connection, user_id: str) -> str:
     now = int(time.time())
     token = secrets.token_urlsafe(32)
     connection.execute(
@@ -176,7 +276,7 @@ def clear_session_cookie(response: Response) -> None:
     )
 
 
-def serialize_user(row: sqlite3.Row) -> dict:
+def serialize_user(row) -> dict:
     return {
         "id": row["id"],
         "userId": resolve_public_user_id(row["username"]),
@@ -187,7 +287,7 @@ def serialize_user(row: sqlite3.Row) -> dict:
     }
 
 
-def fetch_user_by_id(connection: sqlite3.Connection, user_id: str) -> sqlite3.Row | None:
+def fetch_user_by_id(connection, user_id: str):
     return connection.execute(
         """
         SELECT id, username, email, role, experience_key
@@ -295,7 +395,7 @@ def make_notification(notification_id: int, type_name: str, message: str) -> dic
     }
 
 
-def serialize_event_log_row(row: sqlite3.Row) -> dict:
+def serialize_event_log_row(row) -> dict:
     return {
         "id": row["id"],
         "type": row["type"],
@@ -306,7 +406,7 @@ def serialize_event_log_row(row: sqlite3.Row) -> dict:
 
 
 def insert_event_log(
-    connection: sqlite3.Connection,
+    connection,
     *,
     user_id: str,
     type_name: str,
@@ -531,7 +631,7 @@ def healthcheck() -> dict:
         "ok": True,
         "service": "auth-backend",
         "environment": APP_ENV,
-        "databasePath": str(DATABASE_PATH),
+        "database": "postgresql" if USE_POSTGRES else "sqlite",
         "cookie": {
             "name": SESSION_COOKIE_NAME,
             "secure": SESSION_COOKIE_SECURE,
@@ -586,11 +686,8 @@ def register(payload: RegisterPayload, response: Response) -> dict:
             )
             token = create_session(connection, user_id)
             user_row = fetch_user_by_id(connection, user_id)
-    except sqlite3.IntegrityError as error:
-        message = str(error).lower()
-        if "username" in message or "email" in message:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gebruiker bestaat al.") from error
-        raise
+    except DbIntegrityError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gebruiker bestaat al.") from error
 
     set_session_cookie(response, token)
     return {"user": serialize_user(user_row)}

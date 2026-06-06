@@ -764,14 +764,12 @@ setInterval(() => {
 }, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
-if (process.env.VERCEL || require.main !== module) {
-    // Export the server instance for Vercel Serverless environment
+if (require.main !== module) {
     initializeEmailTransport().catch((error) => {
         console.error("Email transport init error:", error);
     });
     module.exports = server;
 } else {
-    // Standard local server execution
     initializeEmailTransport().then(() => {
         server.listen(PORT, () => console.log(`Server draait op poort ${PORT}`));
     }).catch((error) => {

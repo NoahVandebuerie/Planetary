@@ -1,4 +1,5 @@
-from main import (
+from backend.main import (
+    USE_POSTGRES,
     DATABASE_PATH,
     DEFAULT_EXPERIENCE_KEY,
     get_db_connection,
@@ -37,9 +38,17 @@ SEEDED_USERS = [
 
 
 def reset_database() -> None:
-    if DATABASE_PATH.exists():
-        DATABASE_PATH.unlink()
-    init_database()
+    if USE_POSTGRES:
+        init_database()
+        with get_db_connection() as connection:
+            connection.execute("DELETE FROM event_logs")
+            connection.execute("DELETE FROM sessions")
+            connection.execute("DELETE FROM users")
+            connection.commit()
+    else:
+        if DATABASE_PATH.exists():
+            DATABASE_PATH.unlink()
+        init_database()
 
 
 def insert_seed_users() -> None:

@@ -99,7 +99,7 @@ test("Phase 1 smoke: backend + node proxy + auth flow", async (t) => {
   const backend = startProcess("python", [
     "-m",
     "uvicorn",
-    "backend.app:app",
+    "backend.main:app",
     "--host",
     "127.0.0.1",
     "--port",
